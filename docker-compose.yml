@@ -1,0 +1,32 @@
+version: "3.8"
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000" # Exponemos el frontend en el puerto 3000
+    volumes:
+      - ./frontend:/app # Sincronizamos el código fuente
+      - /app/node_modules # Usamos nodos locales
+    environment:
+      - NODE_ENV=development
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000" # Exponemos el backend en el puerto 8000
+    volumes:
+      - ./backend:/app # Sincronizamos el código fuente
+    environment:
+      - APP_ENV=development
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
