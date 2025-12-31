@@ -1,11 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import dynamic from 'next/dynamic';
+import 'leaflet/dist/leaflet.css';
+
+// Cargamos `Leaflet` dinámicamente con `ssr: false` para que se cargue solo en el navegador
+const LeafletMap = dynamic(() => import("@/app/components/LeafletMap"), { ssr: false });
 
 export default function Map() {
     return (
-        <div className="my-8 w-full h-[400px] bg-gray-300 rounded-lg flex justify-center items-center">
-            <p className="text-gray-700 text-lg">[Mapa Interactivo Aquí]</p>
+        <div className="relative">
+            <LeafletMap />
         </div>
     );
 }
