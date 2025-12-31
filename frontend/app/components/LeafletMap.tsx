@@ -5,13 +5,15 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import 'leaflet-draw';
+import { usePolygons } from '../context/PolygonContext';
+import { v4 as uuidv4 } from 'uuid';
 
 type PolygonData = {
     coordinates: number[][]; // Coordenadas del polígono
 };
 
 export default function LeafletMap() {
-    const [polygonData, setPolygonData] = useState<PolygonData | null>(null);
+    const { addPolygon } = usePolygons();
 
     useEffect(() => {
         // Inicializar el mapa
@@ -68,15 +70,20 @@ export default function LeafletMap() {
             const layer = event.layer;
             drawnItems.addLayer(layer);
 
-            // Capturar las coordenadas del polígono
+            // Obtener las coordenadas del polígono dibujado
             const coordinates = layer.getLatLngs()[0].map((coord: L.LatLng) => [coord.lat, coord.lng]);
             console.log('Coordenadas del Polígono:', coordinates);
 
-            // Guardar el polígono en el estado
-            setPolygonData({ coordinates });
+            // Guardar las coordenadas en el contexto
+            const newPolygon = {
+                id: uuidv4(), // Generar un ID único para el polígono
+                name: `Parcela ${new Date().toLocaleString()}`, // Nombre dinámico con la fecha actual
+                coordinates,
+            };
+
+            addPolygon(newPolygon); // Guardar polígono en el contexto global
         });
 
-        // Limpiar el mapa
         return () => {
             map.remove();
         };
@@ -85,18 +92,6 @@ export default function LeafletMap() {
     return (
         <div className="w-full h-[80vh] relative">
             <div id="map" className="h-full"></div>
-
-            {/* Mostrar las coordenadas del polígono */}
-{/*             {polygonData && (
-                <div className="absolute top-0 left-0 bg-white bg-opacity-90 p-4 rounded shadow-md">
-                    <h3 className="font-bold">Coordenadas Seleccionadas:</h3>
-                    {polygonData.coordinates.map((coord, index) => (
-                        <p key={index} className="text-sm text-gray-800">
-                            {`Lat: ${coord[0]}, Lng: ${coord[1]}`}
-                        </p>
-                    ))}
-                </div>
-            )} */}
         </div>
     );
 }

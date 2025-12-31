@@ -1,5 +1,7 @@
 import "@/app/styles/globals.css"; // Asegúrate de importar CSS global
 import Sidebar from "@/app/components/SideBar";
+import { PolygonProvider } from "./context/PolygonContext";
+
 
 export const metadata = {
   title: 'Agricultura de Precisión',
@@ -15,11 +17,13 @@ export default function RootLayout({
     <html lang="es">
       <body className="flex">
         {/* Sidebar */}
-        <Sidebar />
+        <PolygonProvider>
+          <Sidebar />
 
-        {/* Main Content */}
-        <div className="flex-1 bg-gray-100 p-6">{children}</div>
+          {/* Main Content */}
+          <div className="flex-1 bg-gray-100 p-6">{children}</div>
+        </PolygonProvider>
       </body>
-    </html>
+    </html >
   );
 }
