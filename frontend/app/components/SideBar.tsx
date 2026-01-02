@@ -45,7 +45,7 @@ export default function Sidebar() {
 
 
             {/* Perfil del Usuario */}
-            <div className="flex flex-col items-center justify-center mt-36 row-start-5">
+            <div className="flex flex-col items-center justify-center mt-32 row-start-5">
                 <img
                     src="/user-avatar.png"
                     alt="Mi perfil"

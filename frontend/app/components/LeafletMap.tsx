@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
@@ -8,86 +8,103 @@ import 'leaflet-draw';
 import { usePolygons } from '../context/PolygonContext';
 import { v4 as uuidv4 } from 'uuid';
 
-type PolygonData = {
-    coordinates: number[][]; // Coordenadas del polígono
-};
-
 export default function LeafletMap() {
-    const { addPolygon } = usePolygons();
+    const { addPolygon, polygons } = usePolygons();
+
+    const mapRef = React.useRef<L.Map | null>(null);
+    const drawnItemsRef = React.useRef<L.FeatureGroup | null>(null);
 
     useEffect(() => {
-        // Inicializar el mapa
+/*         if (mapRef.current) return; // Evitar reinicialización */
+
         const map = L.map('map', {
-            center: [10.441, -66.3584], // Coordenadas para centrar en Venezuela
+            center: [10.441, -66.3584], // Venezuela
             zoom: 7,
         });
 
+        mapRef.current = map;
+
         // Capas base
         const baseLayers = {
-            "OpenStreetMap": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors',
+            OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
             }),
-            "ESRI World Imagery": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Tiles &copy; Esri'
+            'ESRI World Imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri',
             }),
         };
 
-        // Establecer OpenStreetMap como la capa base predeterminada
         baseLayers["OpenStreetMap"].addTo(map);
-
-        // Agregar un control para intercambiar entre capas base
         L.control.layers(baseLayers).addTo(map);
 
-        // Capas de shapes dibujados
         const drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);
+        drawnItemsRef.current = drawnItems;
 
-        // Controles para dibujar
         const drawControl = new L.Control.Draw({
             edit: {
                 featureGroup: drawnItems,
             },
             draw: {
                 polygon: {
-                    // PolygonOptions instead of boolean true to satisfy types
                     allowIntersection: false,
                     showArea: true,
                     shapeOptions: {
-                        color: '#3388ff'
-                    }
+                        color: '#3388ff',
+                    },
                 },
-                polyline: false,
                 rectangle: false,
                 circle: false,
-                circlemarker: false,
+                polyline: false,
                 marker: false,
             },
         });
         map.addControl(drawControl);
 
-        // Manejo de eventos al dibujar polígono
         map.on(L.Draw.Event.CREATED, function (event: any) {
             const layer = event.layer;
             drawnItems.addLayer(layer);
 
-            // Obtener las coordenadas del polígono dibujado
-            const coordinates = layer.getLatLngs()[0].map((coord: L.LatLng) => [coord.lat, coord.lng]);
-            console.log('Coordenadas del Polígono:', coordinates);
+            // Guardar coordenadas
+            const coordinates = layer.getLatLngs()[0]?.map((coord: L.LatLng) => [coord.lat, coord.lng]);
 
-            // Guardar las coordenadas en el contexto
             const newPolygon = {
-                id: uuidv4(), // Generar un ID único para el polígono
-                name: `Parcela ${new Date().toLocaleString()}`, // Nombre dinámico con la fecha actual
+                id: uuidv4(),
+                name: `Parcela ${new Date().toLocaleString()}`,
                 coordinates,
             };
 
-            addPolygon(newPolygon); // Guardar polígono en el contexto global
+            addPolygon(newPolygon);
         });
+
+        map.invalidateSize();
 
         return () => {
             map.remove();
         };
     }, []);
+
+    // Redibujar polígonos guardados en `PolygonContext`:
+    useEffect(() => {
+        if (!mapRef.current || !drawnItemsRef.current) return;
+        const drawnItems = drawnItemsRef.current!;
+
+        // Limpiar polígonos antiguos
+        drawnItems.clearLayers();
+
+        polygons.forEach((polygon) => {
+            const polygonLayer = L.polygon(
+                polygon.coordinates.map((coords) => L.latLng(coords[0], coords[1])),
+                {
+                    color: '#3388ff',
+                    weight: 2,
+                    fillColor: '#3388ff',
+                    fillOpacity: 0.4,
+                }
+            );
+            drawnItems.addLayer(polygonLayer);
+        });
+    }, [polygons]); // Renderizar cuando cambian los polígonos
 
     return (
         <div className="w-full h-[80vh] relative">

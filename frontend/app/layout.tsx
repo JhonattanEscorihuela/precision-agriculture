@@ -21,7 +21,8 @@ export default function RootLayout({
           <Sidebar />
 
           {/* Main Content */}
-          <div className="flex-1 bg-gray-100 p-6">{children}</div>
+          <div className="flex-1 bg-gray-100 p-6">
+            {children}</div>
         </PolygonProvider>
       </body>
     </html >
