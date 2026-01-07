@@ -1,18 +1,20 @@
-# Usamos una imagen base de Python
-FROM python:3.9
+FROM python:3.10-slim-bookworm
 
-# Establecemos el directorio de trabajo
 WORKDIR /app
 
-# Copiamos los archivos de dependencia
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Añadir capa de dependencias por separado y evitar problemas de red en apt-get
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev wget curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copiamos el código fuente
+# Copiar requisitos y actualizarlos por separado
+COPY requirements.txt requirements.txt
+RUN python -m pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copiar el resto del código
 COPY . .
 
-# Exponemos el puerto del backend
-EXPOSE 8000
-
-# Comando para iniciar el servidor FastAPI
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Comando para iniciar el servidor de FastAPI
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
