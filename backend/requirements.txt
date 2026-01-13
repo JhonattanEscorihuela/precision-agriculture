@@ -5,3 +5,5 @@ pydantic[dotenv]==1.10.9
 fastapi-cache2==0.2.2
 fastapi-versioning==0.10.0
 requests==2.31.0
+sqlmodel==0.0.8
+asyncpg==0.27.0

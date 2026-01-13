@@ -1,23 +1,27 @@
 from fastapi import FastAPI
-from app.api.endpoints import polygons, auth  # Importamos los routers
-from fastapi.middleware.cors import CORSMiddleware  # CORS middleware
+from app.api.endpoints import polygons, auth  # Importa los routers
+from fastapi.middleware.cors import CORSMiddleware
+from app.database import init_db
 
-# Instancia principal de FastAPI
-app = FastAPI(title="Agricultura de Precisión", version="1.0")
+app = FastAPI()
 
-# Middleware CORS
+# Middleware de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permitir todas las fuentes durante desarrollo
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Incluir routers para las rutas
+# Incluir routers
 app.include_router(polygons.router, prefix="/polygons", tags=["Polygons"])
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 
-# Punto de inicio básico para verificar que funciona
+@app.on_event("startup")
+async def on_startup():
+    # Inicializar la base de datos
+    await init_db()
+
 @app.get("/")
 def read_root():
     return {"message": "Backend is running"}

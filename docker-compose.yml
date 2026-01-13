@@ -4,6 +4,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: precision-agriculture-frontend
     ports:
       - "3000:3000" # Exponemos el frontend en el puerto 3000
     volumes:
@@ -18,15 +19,36 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: precision-agriculture-backend
     ports:
       - "8000:8000" # Exponemos el backend en el puerto 8000
     volumes:
       - ./backend:/app # Sincronizamos el código fuente
     environment:
-      - APP_ENV=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/precision
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15-alpine
+    container_name: precision-agriculture-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: precision
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
 
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  postgres_data:
+
+
