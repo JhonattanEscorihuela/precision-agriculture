@@ -14,6 +14,7 @@ type PolygonContextType = {
     polygons: Polygon[]; // Lista de polígonos guardados
     addPolygon: (polygon: Polygon) => void; // Función para agregar un polígono
     removePolygon: (id: string) => void; // Función para eliminar un polígono por ID
+    setAllPolygons: (polygons: Polygon[]) => void; // Función para sobrescribir la lista completa de polígonos
 };
 
 // Crear el contexto
@@ -40,13 +41,18 @@ export const PolygonProvider = ({ children }: { children: React.ReactNode }) => 
         setPolygons((prevPolygons) => [...prevPolygons, polygon]);
     };
 
+    // Sobrescribir toda la lista de polígonos
+    const setAllPolygons = (newPolygons: Polygon[]) => {
+        setPolygons(newPolygons);
+    };
+
     // Eliminar un polígono por ID
     const removePolygon = (id: string) => {
         setPolygons((prevPolygons) => prevPolygons.filter((polygon) => polygon.id !== id));
     };
 
     return (
-        <PolygonContext.Provider value={{ polygons, addPolygon, removePolygon }}>
+        <PolygonContext.Provider value={{ polygons, addPolygon, removePolygon, setAllPolygons }}>
             {children}
         </PolygonContext.Provider>
     );
