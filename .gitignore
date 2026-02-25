@@ -1,0 +1,18 @@
+# Ignorar entornos virtuales
+**/venv/
+**/venv_39/
+**/*.pyc
+**/__pycache__/
+
+# Ignorar logs y dumps
+*.log
+*.dmp
+
+# Evitar subir librerías generadas automáticamente
+**/node_modules/
+**/site-packages/
+
+# Ignorar archivos configurativos o credenciales locales
+.DS_Store
+*.env
+.*.swp
