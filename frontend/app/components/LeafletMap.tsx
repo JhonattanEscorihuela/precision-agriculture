@@ -5,46 +5,16 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import 'leaflet-draw';
-import { usePolygons } from '../context/PolygonContext';
-import { v4 as uuidv4 } from 'uuid';
-import axios from '@/lib/axios';
+import { usePolygons } from '@/app/context/PolygonContext'
 
 export default function LeafletMap() {
-    const { addPolygon, setAllPolygons, polygons } = usePolygons(); // Ahora con setAllPolygons para sincronizar
+    const { polygons, fetchPolygons, createPolygon } = usePolygons();
+    const mapRef = React.useRef<L.Map>(null);
+    const drawnItemsRef = React.useRef<L.FeatureGroup>(null);
 
-    const mapRef = React.useRef<L.Map | null>(null);
-    const drawnItemsRef = React.useRef<L.FeatureGroup | null>(null);
-
-    // Función para obtener polígonos desde el backend
-    const fetchPolygonsFromBackend = async () => {
-        try {
-            const response = await axios.get('/polygons');
-            setAllPolygons(response.data); // Sincronizamos el contexto con los datos del backend
-        } catch (error) {
-            console.error('Error al obtener los polígonos desde el backend:', error);
-        }
-    };
-
-    // Función para crear un nuevo polígono en el backend
-    const createPolygonInBackend = async (polygon: { name: string; coordinates: number[][] }) => {
-        try {
-            const response = await axios.post('/polygons', polygon);
-            const newPolygon = response.data;
-
-            // Agregar el polígono recién creado al contexto local
-            addPolygon(newPolygon);
-        } catch (error) {
-            console.error('Error al guardar el polígono en el backend:', error);
-        }
-    };
-
-    // Inicializar el mapa
+    // Inicializa el mapa y controles
     useEffect(() => {
-        const map = L.map('map', {
-            center: [10.441, -66.3584], // Centrado en Venezuela
-            zoom: 7,
-        });
-
+        const map = L.map('map', { center: [10.441, -66.3584], zoom: 7 });
         mapRef.current = map;
 
         // Capas base
@@ -52,31 +22,24 @@ export default function LeafletMap() {
             OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors',
             }),
-            'ESRI World Imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Tiles &copy; Esri',
-            }),
+            'ESRI World Imagery': L.tileLayer(
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                { attribution: 'Tiles &copy; Esri' }
+            ),
         };
-
-        baseLayers['OpenStreetMap'].addTo(map);
+        baseLayers.OpenStreetMap.addTo(map);
         L.control.layers(baseLayers).addTo(map);
 
+        // FeatureGroup para polígonos
         const drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);
         drawnItemsRef.current = drawnItems;
 
-        // Habilitar controles para dibujar polígonos
+        // Control de dibujo de polígonos
         const drawControl = new L.Control.Draw({
-            edit: {
-                featureGroup: drawnItems,
-            },
+            edit: { featureGroup: drawnItems },
             draw: {
-                polygon: {
-                    allowIntersection: false,
-                    showArea: true,
-                    shapeOptions: {
-                        color: '#3388ff',
-                    },
-                },
+                polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: '#3388ff' } },
                 rectangle: false,
                 circle: false,
                 circlemarker: false,
@@ -86,64 +49,39 @@ export default function LeafletMap() {
         });
         map.addControl(drawControl);
 
-        // Manejo del evento de creación de un nuevo polígono
-        map.on(L.Draw.Event.CREATED, (event: any) => {
-            const layer = event.layer;
+        // Al crear un polígono en el mapa → enviar al backend
+        map.on(L.Draw.Event.CREATED, (ev: any) => {
+            const layer = ev.layer;
             drawnItems.addLayer(layer);
-
-            // Extraer coordenadas del polígono dibujado
-            const coordinates = layer.getLatLngs()[0]?.map((coord: L.LatLng) => [coord.lat, coord.lng]);
-
-            // Nuevo polígono construido
-            const newPolygon = {
-                id: uuidv4(), // Este ID se reemplazará con el generado en el backend
-                name: `Parcela ${new Date().toLocaleString()}`,
-                coordinates,
-            };
-
-            // Guardar en el backend
-            createPolygonInBackend(newPolygon);
+            const coords = (layer.getLatLngs()[0] as L.LatLng[]).map((pt) => [pt.lat, pt.lng]);
+            createPolygon({ name: `Parcela ${new Date().toLocaleString()}`, coordinates: coords });
         });
 
-        // Permitir el ajuste dinámico del tamaño del mapa
+        // Ajustar tamaño
         map.invalidateSize();
 
-        // Ejecutar la función para obtener polígonos desde el backend
-        fetchPolygonsFromBackend();
+        // Cargar polígonos desde backend
+        fetchPolygons();
 
         return () => {
+            map.off();
             map.remove();
         };
-    }, []); // Este useEffect se ejecuta solo al montar
+    }, [fetchPolygons, createPolygon]);
 
-    // Actualizar y redibujar polígonos en el mapa al cambiar el estado
+    // Redibujar al cambiar polygons
     useEffect(() => {
         if (!mapRef.current || !drawnItemsRef.current) return;
-        const drawnItems = drawnItemsRef.current!;
-
-        // Limpiar los polígonos dibujados previamente
-        drawnItems.clearLayers();
-
-        // Redibujar todos los polígonos almacenados en el contexto
-        polygons.forEach((polygon) => {
-            const polygonLayer = L.polygon(
-                polygon.coordinates.map((coords) => L.latLng(coords[0], coords[1])),
-                {
-                    color: '#3388ff',
-                    weight: 2,
-                    fillColor: '#3388ff',
-                    fillOpacity: 0.4,
-                }
-            );
-
-            // Añadir capa al mapa interactivo
-            drawnItems.addLayer(polygonLayer);
+        drawnItemsRef.current.clearLayers();
+        polygons.forEach((poly) => {
+            L.polygon(poly.coordinates.map((c) => L.latLng(c[0], c[1])), {
+                color: '#3388ff',
+                weight: 2,
+                fillColor: '#3388ff',
+                fillOpacity: 0.4,
+            }).addTo(drawnItemsRef.current!);
         });
-    }, [polygons]); // Se actualizan cada vez que `polygons` cambian
+    }, [polygons]);
 
-    return (
-        <div className="w-full h-[80vh] relative">
-            <div id="map" className="h-full"></div>
-        </div>
-    );
+    return <div id="map" className="w-full h-[80vh]"></div>;
 }

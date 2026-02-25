@@ -1,68 +1,88 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import axios from '@/lib/axios';
 
-// Tipo de datos para un polígono
-type Polygon = {
-    id: string; // ID único del polígono
-    name: string; // Nombre del polígono
-    coordinates: number[][]; // Coordenadas del polígono
+export type Polygon = {
+    id: string;
+    name: string;
+    coordinates: number[][];
+    area: number;
+    created_at: string;
+    updated_at: string;
 };
 
-// Definir el tipo del contexto
 type PolygonContextType = {
-    polygons: Polygon[]; // Lista de polígonos guardados
-    addPolygon: (polygon: Polygon) => void; // Función para agregar un polígono
-    removePolygon: (id: string) => void; // Función para eliminar un polígono por ID
-    setAllPolygons: (polygons: Polygon[]) => void; // Función para sobrescribir la lista completa de polígonos
+    polygons: Polygon[];
+    fetchPolygons: () => Promise<void>;
+    createPolygon: (p: Omit<Polygon, 'id' | 'area' | 'created_at' | 'updated_at'>) => Promise<void>;
+    updatePolygon: (id: string, data: Partial<Omit<Polygon, 'id' | 'created_at' | 'updated_at'>>) => Promise<void>;
+    deletePolygon: (id: string) => Promise<void>;
 };
 
-// Crear el contexto
 const PolygonContext = createContext<PolygonContextType | undefined>(undefined);
 
 export const PolygonProvider = ({ children }: { children: React.ReactNode }) => {
     const [polygons, setPolygons] = useState<Polygon[]>([]);
 
-    // Cargar polígonos guardados desde localStorage al iniciar la aplicación
-    useEffect(() => {
-        const storedPolygons = localStorage.getItem('polygons');
-        if (storedPolygons) {
-            setPolygons(JSON.parse(storedPolygons));
+    const fetchPolygons = useCallback(async () => {
+        try {
+            const { data } = await axios.get<Polygon[]>('/polygons');
+            setPolygons(data);
+        } catch (err) {
+            console.error('Error fetching polygons:', err);
         }
     }, []);
 
-    // Guardar automáticamente los cambios en los polígonos en localStorage
-    useEffect(() => {
-        localStorage.setItem('polygons', JSON.stringify(polygons));
-    }, [polygons]);
+    const createPolygon = useCallback(
+        async (polygon: Omit<Polygon, 'id' | 'area' | 'created_at' | 'updated_at'>) => {
+            try {
+                const { data } = await axios.post<Polygon>('/polygons', polygon);
+                setPolygons((prev) => [...prev, data]);
+            } catch (err) {
+                console.error('Error creating polygon:', err);
+            }
+        },
+        []
+    );
 
-    // Agregar un nuevo polígono al estado y `localStorage`
-    const addPolygon = (polygon: Polygon) => {
-        setPolygons((prevPolygons) => [...prevPolygons, polygon]);
-    };
+    const updatePolygon = useCallback(
+        async (id: string, update: Partial<Omit<Polygon, 'id' | 'created_at' | 'updated_at'>>) => {
+            try {
+                const { data } = await axios.put<Polygon>(`/polygons/${id}`, update);
+                setPolygons((prev) => prev.map((p) => (p.id === id ? data : p)));
+            } catch (err) {
+                console.error('Error updating polygon:', err);
+            }
+        },
+        []
+    );
 
-    // Sobrescribir toda la lista de polígonos
-    const setAllPolygons = (newPolygons: Polygon[]) => {
-        setPolygons(newPolygons);
-    };
-
-    // Eliminar un polígono por ID
-    const removePolygon = (id: string) => {
-        setPolygons((prevPolygons) => prevPolygons.filter((polygon) => polygon.id !== id));
-    };
+    const deletePolygon = useCallback(
+        async (id: string) => {
+            try {
+                await axios.delete(`/polygons/${id}`);
+                setPolygons((prev) => prev.filter((p) => p.id !== id));
+            } catch (err) {
+                console.error('Error deleting polygon:', err);
+            }
+        },
+        []
+    );
 
     return (
-        <PolygonContext.Provider value={{ polygons, addPolygon, removePolygon, setAllPolygons }}>
+        <PolygonContext.Provider
+            value={{ polygons, fetchPolygons, createPolygon, updatePolygon, deletePolygon }}
+        >
             {children}
         </PolygonContext.Provider>
     );
 };
 
-// Hook para utilizar el contexto
 export const usePolygons = (): PolygonContextType => {
-    const context = useContext(PolygonContext);
-    if (!context) {
-        throw new Error('usePolygons debe usarse dentro de un PolygonProvider.');
+    const ctx = useContext(PolygonContext);
+    if (!ctx) {
+        throw new Error('usePolygons must be used inside a PolygonProvider');
     }
-    return context;
+    return ctx;
 };
