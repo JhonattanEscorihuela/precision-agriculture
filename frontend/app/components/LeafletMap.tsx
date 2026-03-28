@@ -83,5 +83,5 @@ export default function LeafletMap() {
         });
     }, [polygons]);
 
-    return <div id="map" className="w-full h-[80vh]"></div>;
+    return <div id="map" className="w-full h-[75vh] min-h-[600px] rounded-xl overflow-hidden relative" />;
 }
