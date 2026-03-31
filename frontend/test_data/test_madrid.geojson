@@ -1,0 +1,18 @@
+{
+  "type": "Feature",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[
+      [-3.7038, 40.4168],
+      [-3.7038, 40.4268],
+      [-3.6938, 40.4268],
+      [-3.6938, 40.4168],
+      [-3.7038, 40.4168]
+    ]]
+  },
+  "properties": {
+    "name": "Test Parcela Madrid",
+    "description": "Polígono de prueba en Madrid, España",
+    "area_approx": "1 km²"
+  }
+}

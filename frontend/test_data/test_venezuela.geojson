@@ -1,0 +1,20 @@
+{
+  "type": "Feature",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[
+      [-67.477732, 8.890243],
+      [-67.472585, 8.891811],
+      [-67.482623, 8.921237],
+      [-67.487942, 8.916531],
+      [-67.479534, 8.892108],
+      [-67.47859, 8.892151],
+      [-67.477732, 8.890243]
+    ]]
+  },
+  "properties": {
+    "name": "Test Parcela Guárico",
+    "description": "Polígono de prueba en Guárico, Venezuela (usado en notebook)",
+    "region": "Guárico, Venezuela"
+  }
+}

@@ -23,6 +23,8 @@ services:
       - "8000:8000" # Exponemos el backend en el puerto 8000
     volumes:
       - ./backend:/app # Sincronizamos el código fuente
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/precision
     networks:

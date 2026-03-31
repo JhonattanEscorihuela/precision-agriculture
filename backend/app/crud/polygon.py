@@ -14,6 +14,12 @@ async def get_polygons(db: AsyncSession):
     result = await db.execute(select(Polygon))
     return result.scalars().all()
 
+# Leer un polígono por ID
+async def get_polygon_by_id(db: AsyncSession, polygon_id: int):
+    query = select(Polygon).where(Polygon.id == polygon_id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
 # Actualizar un polígono existente
 async def update_polygon(db: AsyncSession, polygon_id: int, polygon_data: dict):
     query = select(Polygon).where(Polygon.id == polygon_id)

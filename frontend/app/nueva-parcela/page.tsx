@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePolygons } from '../context/PolygonContext';
 import FileUploader from '../components/FileUploader';
+import { closePolygon } from '../utils/coordUtils';
 
 type TabType = 'upload' | 'manual' | 'map';
 
@@ -23,7 +24,13 @@ export default function NuevaParcelaPage() {
 
             // Validar estructura GeoJSON
             if (data.type === 'Feature' && data.geometry?.type === 'Polygon') {
-                const coords = data.geometry.coordinates[0].map((coord: number[]) => [coord[1], coord[0]]);
+                // GeoJSON ya viene en formato correcto [lng, lat]
+                // NO invertir - enviar directamente al backend
+                let coords = data.geometry.coordinates[0];
+
+                // Asegurar que el polígono esté cerrado (primer punto = último punto)
+                coords = closePolygon(coords);
+
                 const name = data.properties?.name || parcelName || file.name.replace(/\.[^/.]+$/, '');
 
                 await createPolygon({ name, coordinates: coords });
@@ -43,7 +50,13 @@ export default function NuevaParcelaPage() {
             const data = JSON.parse(jsonInput);
 
             if (data.type === 'Feature' && data.geometry?.type === 'Polygon') {
-                const coords = data.geometry.coordinates[0].map((coord: number[]) => [coord[1], coord[0]]);
+                // GeoJSON ya viene en formato correcto [lng, lat]
+                // NO invertir - enviar directamente al backend
+                let coords = data.geometry.coordinates[0];
+
+                // Asegurar que el polígono esté cerrado (primer punto = último punto)
+                coords = closePolygon(coords);
+
                 const name = parcelName || data.properties?.name || 'Nueva Parcela';
 
                 await createPolygon({ name, coordinates: coords });

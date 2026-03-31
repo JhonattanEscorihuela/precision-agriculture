@@ -5,7 +5,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import 'leaflet-draw';
-import { usePolygons } from '@/app/context/PolygonContext'
+import { usePolygons } from '@/app/context/PolygonContext';
+import { leafletToGeoJSON, geoJSONToLeaflet, closePolygon } from '@/app/utils/coordUtils';
 
 export default function LeafletMap() {
     const { polygons, fetchPolygons, createPolygon } = usePolygons();
@@ -53,8 +54,20 @@ export default function LeafletMap() {
         map.on(L.Draw.Event.CREATED, (ev: any) => {
             const layer = ev.layer;
             drawnItems.addLayer(layer);
-            const coords = (layer.getLatLngs()[0] as L.LatLng[]).map((pt) => [pt.lat, pt.lng]);
-            createPolygon({ name: `Parcela ${new Date().toLocaleString()}`, coordinates: coords });
+
+            // Leaflet devuelve coordenadas como [lat, lng]
+            const leafletCoords = (layer.getLatLngs()[0] as L.LatLng[]).map((pt) => [pt.lat, pt.lng]);
+
+            // Convertir a formato GeoJSON [lng, lat] para el backend
+            let geoJsonCoords = leafletToGeoJSON(leafletCoords as [number, number][]);
+
+            // Cerrar el polígono (GeoJSON requiere que primer punto = último punto)
+            geoJsonCoords = closePolygon(geoJsonCoords);
+
+            createPolygon({
+                name: `Parcela ${new Date().toLocaleString()}`,
+                coordinates: geoJsonCoords
+            });
         });
 
         // Ajustar tamaño
@@ -73,8 +86,13 @@ export default function LeafletMap() {
     useEffect(() => {
         if (!mapRef.current || !drawnItemsRef.current) return;
         drawnItemsRef.current.clearLayers();
+
         polygons.forEach((poly) => {
-            L.polygon(poly.coordinates.map((c) => L.latLng(c[0], c[1])), {
+            // Backend devuelve coordenadas en formato GeoJSON [lng, lat]
+            // Convertir a formato Leaflet [lat, lng]
+            const leafletCoords = geoJSONToLeaflet(poly.coordinates as [number, number][]);
+
+            L.polygon(leafletCoords.map((c) => L.latLng(c[0], c[1])), {
                 color: '#3388ff',
                 weight: 2,
                 fillColor: '#3388ff',

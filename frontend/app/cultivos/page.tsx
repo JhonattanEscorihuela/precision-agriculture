@@ -59,7 +59,7 @@ export default function CultivosPage() {
     return (
         <div className="animate-fade-in ">
             {/* Header */}
-            <div className="flex justify-between items-start flex-wrap gap-6 mb-8 mb-6 p-6 bg-white rounded-2xl shadow-sm relative overflow-hidden ">
+            <div className="flex justify-between items-start flex-wrap gap-6 mb-6 p-6 bg-white rounded-2xl shadow-sm relative overflow-hidden ">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-800 mb-2  ">Mis Cultivos Guardados</h1>
                     <p className="text-slate-600">
