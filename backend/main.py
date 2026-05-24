@@ -4,6 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
 import logging
 
+# Importar modelos para que SQLModel los registre
+from app.models.user import User
+from app.models.polygon import Polygon
+from app.models.acquisition import SentinelAcquisition
+
 # Configurar logging
 logging.basicConfig(
     level=logging.INFO,
@@ -24,7 +29,7 @@ app.add_middleware(
 # Incluir routers
 app.include_router(polygons.router, prefix="/polygons", tags=["Polygons"])
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(sentinel.router, prefix="/sentinel", tags=["Sentinel-2"])
+app.include_router(sentinel.router, prefix="/api/sentinel", tags=["Sentinel-2"])
 
 @app.on_event("startup")
 async def on_startup():

@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import axios from '@/lib/axios';
 
 export type Polygon = {
-    id: string;
+    id: number;
     name: string;
     coordinates: number[][];
     area: number;
@@ -16,8 +16,8 @@ type PolygonContextType = {
     polygons: Polygon[];
     fetchPolygons: () => Promise<void>;
     createPolygon: (p: Omit<Polygon, 'id' | 'area' | 'created_at' | 'updated_at'>) => Promise<void>;
-    updatePolygon: (id: string, data: Partial<Omit<Polygon, 'id' | 'created_at' | 'updated_at'>>) => Promise<void>;
-    deletePolygon: (id: string) => Promise<void>;
+    updatePolygon: (id: number, data: Partial<Omit<Polygon, 'id' | 'created_at' | 'updated_at'>>) => Promise<void>;
+    deletePolygon: (id: number) => Promise<void>;
 };
 
 const PolygonContext = createContext<PolygonContextType | undefined>(undefined);
@@ -47,24 +47,36 @@ export const PolygonProvider = ({ children }: { children: React.ReactNode }) => 
     );
 
     const updatePolygon = useCallback(
-        async (id: string, update: Partial<Omit<Polygon, 'id' | 'created_at' | 'updated_at'>>) => {
+        async (id: number, update: Partial<Omit<Polygon, 'id' | 'created_at' | 'updated_at'>>) => {
             try {
                 const { data } = await axios.put<Polygon>(`/polygons/${id}`, update);
-                setPolygons((prev) => prev.map((p) => (p.id === id ? data : p)));
+                // Forzar actualización del estado creando un nuevo array
+                setPolygons((prev) => {
+                    const newPolygons = prev.map((p) => (p.id === id ? { ...data } : p));
+                    console.log('Updated polygons:', newPolygons);
+                    return newPolygons;
+                });
             } catch (err) {
                 console.error('Error updating polygon:', err);
+                throw err;
             }
         },
         []
     );
 
     const deletePolygon = useCallback(
-        async (id: string) => {
+        async (id: number) => {
             try {
                 await axios.delete(`/polygons/${id}`);
-                setPolygons((prev) => prev.filter((p) => p.id !== id));
+                // Forzar actualización del estado creando un nuevo array
+                setPolygons((prev) => {
+                    const newPolygons = prev.filter((p) => p.id !== id);
+                    console.log('Remaining polygons after delete:', newPolygons);
+                    return newPolygons;
+                });
             } catch (err) {
                 console.error('Error deleting polygon:', err);
+                throw err;
             }
         },
         []

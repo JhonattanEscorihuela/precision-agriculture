@@ -14,6 +14,11 @@ async def get_polygons(db: AsyncSession):
     result = await db.execute(select(Polygon))
     return result.scalars().all()
 
+# Leer polígonos de un usuario específico
+async def get_polygons_by_user(db: AsyncSession, user_id: int):
+    result = await db.execute(select(Polygon).where(Polygon.user_id == user_id))
+    return result.scalars().all()
+
 # Leer un polígono por ID
 async def get_polygon_by_id(db: AsyncSession, polygon_id: int):
     query = select(Polygon).where(Polygon.id == polygon_id)

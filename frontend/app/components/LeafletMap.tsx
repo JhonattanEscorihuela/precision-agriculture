@@ -1,17 +1,22 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import 'leaflet-draw';
 import { usePolygons } from '@/app/context/PolygonContext';
 import { leafletToGeoJSON, geoJSONToLeaflet, closePolygon } from '@/app/utils/coordUtils';
+import SentinelPanel from './organisms/SentinelPanel';
 
 export default function LeafletMap() {
     const { polygons, fetchPolygons, createPolygon } = usePolygons();
     const mapRef = React.useRef<L.Map>(null);
     const drawnItemsRef = React.useRef<L.FeatureGroup>(null);
+
+    // Estado para el panel de Sentinel
+    const [selectedPolygon, setSelectedPolygon] = useState<{ id: number; name: string } | null>(null);
+    const [isPanelOpen, setIsPanelOpen] = useState(false);
 
     // Inicializa el mapa y controles
     useEffect(() => {
@@ -92,14 +97,49 @@ export default function LeafletMap() {
             // Convertir a formato Leaflet [lat, lng]
             const leafletCoords = geoJSONToLeaflet(poly.coordinates as [number, number][]);
 
-            L.polygon(leafletCoords.map((c) => L.latLng(c[0], c[1])), {
+            const polygon = L.polygon(leafletCoords.map((c) => L.latLng(c[0], c[1])), {
                 color: '#3388ff',
                 weight: 2,
                 fillColor: '#3388ff',
                 fillOpacity: 0.4,
-            }).addTo(drawnItemsRef.current!);
+            });
+
+            // Al hacer click en el polígono, hacer zoom y abrir panel de Sentinel
+            polygon.on('click', () => {
+                // Zoom al polígono seleccionado con padding para compensar el panel lateral
+                const bounds = polygon.getBounds();
+                mapRef.current?.fitBounds(bounds, {
+                    paddingTopLeft: [50, 50],
+                    paddingBottomRight: [450, 50] // Extra padding derecho para el panel
+                });
+
+                // Cerrar panel y resetear, luego abrir con nueva parcela
+                setIsPanelOpen(false);
+                setSelectedPolygon(null);
+
+                // Pequeño delay para asegurar que el panel se desmonta completamente
+                setTimeout(() => {
+                    setSelectedPolygon({ id: poly.id, name: poly.name });
+                    setIsPanelOpen(true);
+                }, 50);
+            });
+
+            polygon.addTo(drawnItemsRef.current!);
         });
     }, [polygons]);
 
-    return <div id="map" className="w-full h-[75vh] min-h-[600px] rounded-xl overflow-hidden relative" />;
+    return (
+        <>
+            <div id="map" className="w-full h-[75vh] min-h-[600px] rounded-xl overflow-hidden relative" />
+
+            {selectedPolygon && (
+                <SentinelPanel
+                    polygonId={selectedPolygon.id}
+                    polygonName={selectedPolygon.name}
+                    isOpen={isPanelOpen}
+                    onClose={() => setIsPanelOpen(false)}
+                />
+            )}
+        </>
+    );
 }

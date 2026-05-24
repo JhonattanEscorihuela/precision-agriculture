@@ -27,6 +27,7 @@ class SentinelService:
 
     PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
     TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    STAC_URL = "https://stac.dataspace.copernicus.eu/v1/search"
 
     def __init__(self):
         """
@@ -563,6 +564,279 @@ function evaluatePixel(sample) {
 
             response.raise_for_status()
             return response.content
+
+    async def acquire_bands(
+        self,
+        polygon_coords: List[List[float]],
+        date: str,
+        polygon_id: int,
+        db_session = None,
+        width: int = 512,
+        height: int = 512,
+        max_cloud_coverage: int = 20
+    ) -> Dict:
+        """
+        OE1 - Descarga bandas B04 y B08 y las guarda en la base de datos.
+
+        Llama a Process API para obtener cada banda por separado como GeoTIFF,
+        valida tamaños, y persiste en BD via CRUD.
+
+        Args:
+            polygon_coords: Coordenadas del polígono [[lng, lat], ...]
+            date: Fecha de adquisición (YYYY-MM-DD)
+            polygon_id: ID del polígono en BD
+            width: Ancho de la imagen en píxeles
+            height: Alto de la imagen en píxeles
+            max_cloud_coverage: Cobertura máxima de nubes (para filtro temporal)
+
+        Returns:
+            Dict con información de la adquisición:
+            {
+                "acquisition_id": int,
+                "polygon_id": int,
+                "date": str,
+                "cloud_coverage": float,
+                "size_b04_kb": float,
+                "size_b08_kb": float
+            }
+
+        Raises:
+            ValueError: Si las bandas exceden 10MB cada una
+            httpx.HTTPError: Si falla la descarga
+        """
+        from datetime import datetime
+        from app.models.acquisition import SentinelAcquisitionCreate
+        from app.crud.acquisition import create_acquisition, get_acquisition_by_polygon_and_date
+
+        logger.info(f"🛰️  Iniciando adquisición de bandas B04 y B08...")
+        logger.info(f"   Polígono ID: {polygon_id}")
+        logger.info(f"   Fecha: {date}")
+        logger.info(f"   Dimensiones: {width}x{height}")
+
+        # Construir geometría GeoJSON
+        polygon_geojson = {
+            "type": "Polygon",
+            "coordinates": [polygon_coords]
+        }
+
+        # Verificar si ya existe esta adquisición (solo si se provee db_session)
+        if db_session:
+            existing = await get_acquisition_by_polygon_and_date(db_session, polygon_id, date)
+            if existing:
+                logger.warning(f"⚠️  Ya existe adquisición para polígono {polygon_id} en {date}")
+                return {
+                    "acquisition_id": existing.id,
+                    "polygon_id": existing.polygon_id,
+                    "date": existing.acquisition_date,
+                    "cloud_coverage": existing.cloud_coverage,
+                    "size_b04_kb": len(existing.b04_data) / 1024,
+                    "size_b08_kb": len(existing.b08_data) / 1024,
+                    "already_existed": True
+                }
+
+        # Descargar B04 (Red band)
+        logger.info("📥 Descargando banda B04 (Red)...")
+        b04_bytes = await self.download_bands(
+            polygon_geojson=polygon_geojson,
+            bands=["B04"],
+            start_date=date,
+            end_date=date,
+            width=width,
+            height=height,
+            max_cloud_coverage=max_cloud_coverage,
+            polygon_id=polygon_id
+        )
+
+        # Validar tamaño B04
+        b04_size_mb = len(b04_bytes) / (1024 * 1024)
+        logger.info(f"✅ B04 descargada: {b04_size_mb:.2f} MB")
+        if b04_size_mb > 10:
+            raise ValueError(f"B04 excede 10MB: {b04_size_mb:.2f} MB")
+
+        # Descargar B08 (NIR band)
+        logger.info("📥 Descargando banda B08 (NIR)...")
+        b08_bytes = await self.download_bands(
+            polygon_geojson=polygon_geojson,
+            bands=["B08"],
+            start_date=date,
+            end_date=date,
+            width=width,
+            height=height,
+            max_cloud_coverage=max_cloud_coverage,
+            polygon_id=polygon_id
+        )
+
+        # Validar tamaño B08
+        b08_size_mb = len(b08_bytes) / (1024 * 1024)
+        logger.info(f"✅ B08 descargada: {b08_size_mb:.2f} MB")
+        if b08_size_mb > 10:
+            raise ValueError(f"B08 excede 10MB: {b08_size_mb:.2f} MB")
+
+        # Obtener cloud_coverage del día desde STAC
+        logger.info("☁️  Obteniendo cloud_coverage desde STAC...")
+        available_dates = await self.get_available_dates(
+            polygon_coords=polygon_coords,
+            start_date=date,
+            end_date=date,
+            max_cloud=100  # Buscar el día específico sin filtro
+        )
+
+        cloud_coverage = 0.0
+        if available_dates:
+            cloud_coverage = available_dates[0]["cloud_cover"]
+            logger.info(f"   Cloud coverage: {cloud_coverage}%")
+        else:
+            logger.warning(f"⚠️  No se encontró cloud_coverage para {date}, usando 0.0")
+
+        # Crear registro en BD (solo si se provee db_session)
+        if db_session:
+            logger.info("💾 Guardando en base de datos...")
+            acquisition_data = SentinelAcquisitionCreate(
+                polygon_id=polygon_id,
+                acquisition_date=date,
+                cloud_coverage=cloud_coverage,
+                width=width,
+                height=height,
+                b04_data=b04_bytes,
+                b08_data=b08_bytes,
+                created_at=datetime.utcnow().isoformat()
+            )
+
+            acquisition = await create_acquisition(db_session, acquisition_data)
+            logger.info(f"✅ Adquisición guardada con ID: {acquisition.id}")
+
+            return {
+                "acquisition_id": acquisition.id,
+                "polygon_id": acquisition.polygon_id,
+                "date": acquisition.acquisition_date,
+                "cloud_coverage": acquisition.cloud_coverage,
+                "size_b04_kb": len(b04_bytes) / 1024,
+                "size_b08_kb": len(b08_bytes) / 1024,
+                "already_existed": False
+            }
+        else:
+            # Si no hay sesión, retornar datos sin guardar (útil para tests)
+            logger.warning("⚠️  No se proveyó db_session, retornando datos sin guardar en BD")
+            return {
+                "acquisition_id": -1,
+                "polygon_id": polygon_id,
+                "date": date,
+                "cloud_coverage": cloud_coverage,
+                "size_b04_kb": len(b04_bytes) / 1024,
+                "size_b08_kb": len(b08_bytes) / 1024
+            }
+
+    async def get_available_dates(
+        self,
+        polygon_coords: List[List[float]],
+        start_date: str,
+        end_date: str,
+        max_cloud: int = 20
+    ) -> List[Dict]:
+        """
+        OE1 - Consulta STAC API para obtener fechas con imágenes disponibles.
+
+        Filtra escenas Sentinel-2 L2A con cobertura de nubes ≤ max_cloud.
+        STAC API no requiere autenticación.
+
+        Args:
+            polygon_coords: Coordenadas del polígono [[lng, lat], ...]
+            start_date: Fecha inicio (YYYY-MM-DD)
+            end_date: Fecha fin (YYYY-MM-DD)
+            max_cloud: Cobertura máxima de nubes permitida (0-100)
+
+        Returns:
+            Lista de fechas disponibles ordenadas descendente:
+            [
+                {
+                    "date": "2024-06-15",
+                    "cloud_cover": 12.5,
+                    "scene_id": "S2A_...",
+                    "datetime": "2024-06-15T10:30:00Z"
+                },
+                ...
+            ]
+
+        Raises:
+            httpx.HTTPError: Si falla la consulta a STAC API
+        """
+        logger.info(f"🔍 Consultando STAC API para fechas disponibles...")
+        logger.info(f"   Rango: {start_date} → {end_date}")
+        logger.info(f"   Max nubosidad: {max_cloud}%")
+
+        # Construir payload para STAC API
+        payload = {
+            "collections": ["sentinel-2-l2a"],
+            "datetime": f"{start_date}T00:00:00Z/{end_date}T23:59:59Z",
+            "intersects": {
+                "type": "Polygon",
+                "coordinates": [polygon_coords]
+            },
+            "limit": 100,
+            "fields": {
+                "include": [
+                    "properties.datetime",
+                    "properties.eo:cloud_cover",
+                    "id"
+                ],
+                "exclude": ["assets", "links", "geometry"]
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    self.STAC_URL,
+                    json=payload,
+                    headers={"Content-Type": "application/json"}
+                )
+                response.raise_for_status()
+                data = response.json()
+
+            features = data.get("features", [])
+            logger.info(f"📦 STAC API retornó {len(features)} escenas totales")
+
+            # Filtrar por cobertura de nubes y extraer información relevante
+            # IMPORTANTE: Agrupar por fecha y quedarnos con la escena de menor nubosidad
+            dates_dict = {}  # key: date, value: {date, cloud_cover, scene_id, datetime}
+
+            for feature in features:
+                props = feature.get("properties", {})
+                cloud_cover = props.get("eo:cloud_cover", 100)
+
+                if cloud_cover <= max_cloud:
+                    datetime_str = props.get("datetime", "")
+                    # Extraer solo la fecha (YYYY-MM-DD)
+                    date_only = datetime_str.split("T")[0] if datetime_str else ""
+
+                    # Si ya existe esta fecha, quedarnos con la de menor cloud_cover
+                    if date_only in dates_dict:
+                        if cloud_cover < dates_dict[date_only]["cloud_cover"]:
+                            dates_dict[date_only] = {
+                                "date": date_only,
+                                "cloud_cover": round(cloud_cover, 2),
+                                "scene_id": feature.get("id", ""),
+                                "datetime": datetime_str
+                            }
+                    else:
+                        dates_dict[date_only] = {
+                            "date": date_only,
+                            "cloud_cover": round(cloud_cover, 2),
+                            "scene_id": feature.get("id", ""),
+                            "datetime": datetime_str
+                        }
+
+            # Convertir dict a lista y ordenar por fecha descendente
+            available_dates = list(dates_dict.values())
+            available_dates.sort(key=lambda x: x["datetime"], reverse=True)
+
+            logger.info(f"✅ {len(available_dates)} fechas únicas aptas (≤{max_cloud}% nubes)")
+
+            return available_dates
+
+        except httpx.HTTPError as e:
+            logger.error(f"❌ Error consultando STAC API: {str(e)}")
+            raise
 
     async def check_availability(
         self,

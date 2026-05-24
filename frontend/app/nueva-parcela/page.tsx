@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { usePolygons } from '../context/PolygonContext';
 import FileUploader from '../components/FileUploader';
 import { closePolygon } from '../utils/coordUtils';
+import ProtectedRoute from '@/app/components/ProtectedRoute';
 
 type TabType = 'upload' | 'manual' | 'map';
 
@@ -77,54 +78,56 @@ export default function NuevaParcelaPage() {
     ];
 
     return (
+        <ProtectedRoute>
         <div className="animate-fade-in">
             {/* Header */}
-            <div className="mb-6 p-6 bg-white rounded-2xl shadow-sm relative overflow-hidden">
+            <div className="mb-4 lg:mb-6 p-4 lg:p-6 bg-white rounded-xl lg:rounded-2xl shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 left-0 right-0 h-1 " />
-                <h1 className="text-3xl font-bold text-slate-800 mb-2 flex items-center gap-3">
-                    <span className="text-4xl">➕</span>
-                    Cargar Nueva Parcela
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-2 flex items-center gap-2 lg:gap-3">
+                    <span className="text-2xl sm:text-3xl lg:text-4xl">➕</span>
+                    <span className="truncate">Cargar Nueva Parcela</span>
                 </h1>
-                <p className="text-slate-600">
+                <p className="text-xs sm:text-sm lg:text-base text-slate-600">
                     Importa datos geoespaciales o define manualmente una nueva zona de cultivo
                 </p>
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-3 mb-6 flex-wrap">
+            <div className="flex gap-2 lg:gap-3 mb-4 lg:mb-6 flex-wrap">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${
+                        className={`flex items-center gap-1.5 lg:gap-2 px-3 sm:px-4 lg:px-6 py-2 lg:py-3 rounded-lg lg:rounded-xl font-semibold text-xs sm:text-sm lg:text-base transition-all ${
                             activeTab === tab.id
                                 ? 'bg-gradient-to-r from-satellite-blue to-satellite-deep text-white shadow-lg'
                                 : 'bg-white text-slate-700 hover:bg-slate-50 shadow-sm border-2 border-slate-200'
                         }`}
                     >
-                        <span className="text-xl">{tab.icon}</span>
-                        <span>{tab.label}</span>
+                        <span className="text-base sm:text-lg lg:text-xl">{tab.icon}</span>
+                        <span className="hidden sm:inline">{tab.label}</span>
+                        <span className="sm:hidden">{tab.id === 'upload' ? 'Subir' : tab.id === 'manual' ? 'Manual' : 'Mapa'}</span>
                     </button>
                 ))}
             </div>
 
             {/* Mensajes */}
             {error && (
-                <div className="mb-6 p-4 bg-vegetation-critical/10 border-2 border-vegetation-critical/30 rounded-xl flex items-center gap-3 text-vegetation-critical animate-fade-in">
-                    <span className="text-2xl">⚠️</span>
-                    <span className="font-medium">{error}</span>
+                <div className="mb-4 lg:mb-6 p-3 lg:p-4 bg-vegetation-critical/10 border-2 border-vegetation-critical/30 rounded-lg lg:rounded-xl flex items-center gap-2 lg:gap-3 text-vegetation-critical animate-fade-in">
+                    <span className="text-xl lg:text-2xl flex-shrink-0">⚠️</span>
+                    <span className="font-medium text-xs lg:text-base">{error}</span>
                 </div>
             )}
 
             {success && (
-                <div className="mb-6 p-4 bg-vegetation-healthy/10 border-2 border-vegetation-healthy/30 rounded-xl flex items-center gap-3 text-vegetation-healthy animate-fade-in">
-                    <span className="text-2xl">✓</span>
-                    <span className="font-medium">¡Parcela creada exitosamente! Redirigiendo...</span>
+                <div className="mb-4 lg:mb-6 p-3 lg:p-4 bg-vegetation-healthy/10 border-2 border-vegetation-healthy/30 rounded-lg lg:rounded-xl flex items-center gap-2 lg:gap-3 text-vegetation-healthy animate-fade-in">
+                    <span className="text-xl lg:text-2xl flex-shrink-0">✓</span>
+                    <span className="font-medium text-xs lg:text-base">¡Parcela creada exitosamente! Redirigiendo...</span>
                 </div>
             )}
 
             {/* Contenido según tab */}
-            <div className="bg-white rounded-2xl shadow-md p-8">
+            <div className="bg-white rounded-xl lg:rounded-2xl shadow-md p-4 sm:p-6 lg:p-8">
                 {activeTab === 'upload' && (
                     <div className="space-y-6">
                         <div>
@@ -274,5 +277,6 @@ export default function NuevaParcelaPage() {
                 )}
             </div>
         </div>
+        </ProtectedRoute>
     );
 }

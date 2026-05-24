@@ -1,519 +1,251 @@
-```markdown
-# 🎯 INSTRUCCIONES PARA CLAUDE
+# 🎯 INSTRUCCIONES PARA CLAUDE CODE
 
 ## LO MÁS IMPORTANTE: Lee esto SIEMPRE antes de ayudarme
 
-Estoy haciendo mi proyecto de grado (PEG) sobre agricultura de precisión con imágenes satelitales.
+Estoy desarrollando mi Proyecto Especial de Grado (PEG) sobre agricultura de precisión
+con imágenes satelitales Sentinel-2. Eres mi asistente de ingeniería de software.
+Tu trabajo es ayudarme a construir código de calidad que cumpla con cada objetivo.
 
 ---
 
-## 📋 MI PROYECTO TIENE 7 OBJETIVOS
+## 📋 MIS OBJETIVOS (Taxonomía de Bloom — de menor a mayor complejidad)
 
-**Acuerdate que cada vez que me ayudes, debes decirme a cuál de estos 7 objetivos estamos avanzando:**
+> Cada vez que me ayudes, dime explícitamente a cuál OE estamos avanzando.
 
-1. **OE1** - Descargar imágenes del satélite Sentinel-2
-2. **OE2** - Calcular el NDVI (salud de las plantas)
-3. **OE3** - Analizar texturas en las imágenes
-4. **OE4** - Usar inteligencia artificial para clasificar la salud de los cultivos
-5. **OE5** - Detectar nubes y validar si la imagen sirve
-6. **OE6** - Crear la interfaz web para que los usuarios vean resultados
-7. **OE7** - Validar que todo funciona bien (tests, métricas)
+| OE | Verbo | Nivel | Descripción |
+|----|-------|-------|-------------|
+| **OE1** | Identificar | N1-N2 | Identificar escenas Sentinel-2 aptas via STAC API por polígono y nubosidad |
+| **OE2** | Aplicar | N3 | Aplicar cálculo de índices espectrales (NDVI) sobre imágenes adquiridas |
+| **OE3** | Analizar | N4 | Analizar y segmentar zonas cultivadas usando NDVI y señales espaciales |
+| **OE4** | Evaluar | N5 | Evaluar descriptores de textura extraídos por filtrado convolucional |
+| **OE5** | Construir | N6 | Construir la interfaz integrando todos los servicios anteriores |
 
 ---
 
-## 🚨 REGLAS QUE NUNCA PUEDES ROMPER
+## 🧠 MODO DE TRABAJO — INGENIERÍA DE AGENTES
 
-### FRONTEND (Next.js)
+### 1. Planificar antes de codificar
+- Para CUALQUIER tarea no trivial (3+ pasos o decisiones arquitectónicas): escribe primero el plan en `tasks/todo.md` con ítems verificables y espera mi confirmación antes de implementar.
+- Si algo sale mal durante la implementación: DETENTE y replantea el plan. No sigas empujando.
+- Usa el modo de planificación también para los pasos de verificación, no solo para construir.
+- Escribe especificaciones detalladas antes de empezar para reducir ambigüedad.
 
-✅ SIEMPRE usar:
-- Next.js con TypeScript
-- Tailwind CSS para estilos
-- Componentes pequeños y reutilizables (metodología atómica/molecular)
-- Nombres de carpetas: components/atoms/, components/molecules/, components/organisms/
+### 2. Verificación antes de marcar completo
+- Nunca marques una tarea como completa sin demostrar que funciona.
+- Pregúntate: *"¿Aprobaría mi tutor este objetivo como cumplido con esta evidencia?"*
+- Ejecuta los tests, revisa los logs, demuestra la corrección.
+- Cada OE tiene una evidencia medible definida — úsala como criterio de aceptación.
 
-❌ JAMÁS usar:
-- CSS puro en archivos .css
-- HTML plano
-- Archivos con más de 200 líneas de código
-- Estilos inline complejos (solo className con Tailwind)
+### 3. Ciclo de mejora continua
+- Después de CUALQUIER corrección mía: actualiza `tasks/lessons.md` con el patrón del error.
+- Escribe reglas para ti mismo que prevengan el mismo error en el futuro.
+- Al inicio de cada sesión: revisa `tasks/lessons.md` para recordar lecciones del proyecto.
 
-**Ejemplo de componente CORRECTO:**
+### 4. Elegancia equilibrada
+- Para cambios no triviales: pausa y pregúntate *"¿hay una forma más elegante?"*
+- Si una solución se siente como un parche: *"Sabiendo todo lo que sé, implementa la solución elegante."*
+- Para correcciones simples y obvias: no sobrediseñes.
 
-```tsx
-// ✅ components/atoms/Button.tsx (PEQUEÑO, reutilizable)
-interface ButtonProps {
-  label: string;
-  onClick: () => void;
-  variant?: 'primary' | 'secondary';
-}
+### 5. Corrección autónoma de errores
+- Cuando me reportes un bug: corrígelo directamente. No me pidas que te guíe paso a paso.
+- Apunta a los logs, errores y tests fallidos — luego resuélvelos.
+- Cero cambio de contexto requerido de mi parte.
 
-export default function Button({ label, onClick, variant = 'primary' }: ButtonProps) {
-  const baseStyles = "px-4 py-2 rounded-lg font-medium transition-colors";
-  const variantStyles = {
-    primary: "bg-blue-600 hover:bg-blue-700 text-white",
-    secondary: "bg-gray-200 hover:bg-gray-300 text-gray-800"
-  };
+---
 
-  return (
-    <button 
-      onClick={onClick}
-      className={`${baseStyles} ${variantStyles[variant]}`}
-    >
-      {label}
-    </button>
-  );
-}
+## 📁 GESTIÓN DE TAREAS
+
+```
+tasks/
+├── todo.md      ← Plan activo con checkboxes por OE
+└── lessons.md   ← Errores corregidos y patrones aprendidos
 ```
 
-**Ejemplo INCORRECTO:**
+**Flujo obligatorio para cada tarea:**
+1. **Planificar** → Escribir plan en `tasks/todo.md` con ítems verificables
+2. **Confirmar** → Esperar mi aprobación antes de implementar
+3. **Ejecutar** → Marcar ítems completos a medida que avanzas
+4. **Explicar** → Resumen de alto nivel en cada paso
+5. **Documentar** → Agregar sección de revisión en `tasks/todo.md`
+6. **Aprender** → Actualizar `tasks/lessons.md` después de correcciones
 
-```tsx
-// ❌ NO HACER ESTO (archivo gigante, estilos mezclados)
-export default function MegaComponent() {
-  return (
-    <div style={{ color: 'red' }}> {/* ❌ estilos inline */}
-      {/* 500 líneas de código aquí... */}
-    </div>
-  );
-}
-```
+---
 
-### BACKEND (Python/FastAPI)
-
-✅ Estructura que DEBES respetar:
+## 🏗️ REGLAS DE ARQUITECTURA — BACKEND
 
 ```
 backend/app/
-  ├── services/        ← Aquí va la LÓGICA (cálculos, algoritmos)
-  ├── crud/            ← Aquí va TODO lo de base de datos
-  ├── api/endpoints/   ← Aquí van las URLs de la API (super simples)
-  └── schemas/         ← Aquí van los modelos de datos (Pydantic)
+├── services/          ← TODA la lógica de negocio y cálculos
+├── crud/              ← SOLO operaciones de base de datos
+├── api/endpoints/     ← SOLO orquestación, sin lógica
+└── schemas/           ← Modelos Pydantic de request/response
 ```
 
-❌ NUNCA mezcles:
-- Lógica de negocio en los endpoints
-- Queries de base de datos fuera de crud/
+**Reglas irrompibles:**
+- ❌ Nunca lógica de negocio en endpoints
+- ❌ Nunca queries de BD fuera de `crud/`
+- ✅ Endpoints llaman a services → services llaman a crud
 
-**Ejemplo CORRECTO:**
-
+**Ejemplo correcto:**
 ```python
-# ✅ backend/app/services/ndvi_service.py
-# (Este archivo SOLO hace cálculos, no toca la base de datos)
+# ✅ backend/app/services/sentinel_service.py
+class SentinelService:
+    async def get_available_dates(self, polygon_coords, start_date, end_date):
+        """Solo lógica — llama al STAC API y filtra por nubosidad"""
+        ...
 
-import numpy as np
-
-class NDVIService:
-    def calculate_ndvi(self, red_band: np.ndarray, nir_band: np.ndarray) -> np.ndarray:
-        """Calcula NDVI: (NIR - Red) / (NIR + Red)"""
-        ndvi = (nir_band - red_band) / (nir_band + red_band + 1e-8)
-        return np.clip(ndvi, -1, 1)  # Limita valores entre -1 y 1
-```
-
-```python
-# ✅ backend/app/api/endpoints/ndvi.py
-# (Este archivo SOLO recibe peticiones y orquesta)
-
-from fastapi import APIRouter, Depends
-from app.services.ndvi_service import NDVIService
-
-router = APIRouter()
-
-@router.post("/calculate")
-async def calculate_ndvi(polygon_id: int):
-    service = NDVIService()
-    # Llama al servicio, no hace la lógica aquí
-    result = service.calculate_ndvi(...)
-    return {"ndvi": result}
+# ✅ backend/app/api/endpoints/sentinel.py
+@router.get("/available-dates/{polygon_id}")
+async def available_dates(polygon_id: int):
+    """Solo orquesta — sin lógica aquí"""
+    service = SentinelService()
+    return await service.get_available_dates(...)
 ```
 
 ---
 
-## 🗂️ ESTRUCTURA DE COMPONENTES FRONTEND (Metodología Molecular)
+## 🏗️ REGLAS DE ARQUITECTURA — FRONTEND
 
 ```
 frontend/app/components/
-├── atoms/              ← Componentes MUY pequeños (botones, inputs, iconos)
-│   ├── Button.tsx
-│   ├── Input.tsx
-│   └── Badge.tsx
-│
-├── molecules/          ← Combinación de 2-3 atoms (formularios simples, cards)
-│   ├── FormField.tsx   (Input + Label)
-│   ├── PolygonCard.tsx (Badge + Button + texto)
-│   └── DateRangePicker.tsx
-│
-└── organisms/          ← Componentes completos (navbar, sidebar, tablas)
-    ├── MapViewer.tsx
-    ├── PolygonList.tsx
-    └── NDVIChart.tsx
+├── atoms/       ← Componentes mínimos: Button, Input, Badge (< 50 líneas)
+├── molecules/   ← Combinación de atoms: FormField, DatePicker (< 100 líneas)
+└── organisms/   ← Componentes completos: MapViewer, ResultsPanel (< 200 líneas)
 ```
 
-**Regla de oro:** Si un componente tiene más de 150 líneas, divídelo en partes más pequeñas.
+**Reglas irrompibles:**
+- ❌ Nunca CSS puro — solo Tailwind
+- ❌ Nunca componentes > 200 líneas — dividir en partes
+- ❌ Nunca estilos inline complejos
+- ✅ Siempre TypeScript
+- ✅ Siempre `ssr: false` en componentes con Leaflet
 
----
-
-## 💬 CÓMO AYUDARME EN CADA RESPUESTA
-
-Cada vez que me des código, SIEMPRE incluye:
-
-1. **A qué objetivo avanzamos:** "Esto es para OE2 (calcular NDVI)"
-2. **Dónde va el archivo:** "Crear en `backend/app/services/ndvi_service.py`"
-3. **Qué hace:** Explicación en español simple
-4. **Próximo paso:** Qué debería hacer después
-
-**Ejemplo de respuesta perfecta:**
-
-```
-🎯 Estamos trabajando en: OE2 (Procesamiento - Cálculo NDVI)
-
-📁 Archivo a crear: backend/app/services/ndvi_service.py
-
-📝 ¿Qué hace este código?
-Recibe dos imágenes (banda roja y banda infrarroja) y calcula
-el índice de vegetación NDVI que nos dice qué tan sana está la planta.
-
-[CÓDIGO AQUÍ]
-
-✅ Próximo paso:
-Ahora necesitas crear el endpoint en api/endpoints/ndvi.py para
-que el frontend pueda llamar a este servicio.
-¿Quieres que lo genere?
-```
-
----
-
-## 🔍 PREGUNTAS QUE DEBES HACERME ANTES DE GENERAR CÓDIGO
-
-Si no estoy siendo claro en mi petición, pregúntame:
-
-1. ¿Para qué objetivo específico es esto? (OE1-OE7)
-2. ¿Va en frontend o backend?
-3. ¿Es un componente nuevo o modificamos uno existente?
-4. ¿Necesitas que te explique algo antes de empezar?
-
----
-
-## 📦 COMANDOS RÁPIDOS (Para que copies y pegues)
-
-Cuando me escribas, usa estos atajos:
-
-- `@ESTADO` → Muéstrame qué objetivos están completos y cuáles faltan
-- `@SIGUIENTE` → Dime qué debería hacer ahora (prioridad)
-- `@COMPONENTE [nombre]` → Crea un componente frontend nuevo
-- `@SERVICIO [nombre]` → Crea un servicio backend nuevo
-- `@EXPLICAR [tema]` → Explícame algo que no entiendo
-
----
-
-## 📊 ESTADO ACTUAL DEL PROYECTO
-
-### ✅ OE1: Servicio de Adquisición Sentinel-2
-**Estado:** IMPLEMENTADO EN NOTEBOOKS
-- ✓ Autenticación OAuth2 Copernicus DataSpace
-- ✓ Descarga por polígono + rango temporal
-- ✓ Nivel L2A (bandas B04/B08)
-- 🔧 PENDIENTE: Migrar lógica a `backend/app/services/sentinel_service.py`
-- 🔧 PENDIENTE: Endpoint API `/api/sentinel/download`
-
-### 🟡 OE2: Servicio de Procesamiento (Índices + Segmentación)
-**Estado:** PARCIAL
-- ✓ Cálculo NDVI en notebook 02
-- ✓ Máscara vegetación (NDVI > 0.3)
-- 🔧 PENDIENTE: Servicio de cálculo persistente
-- 🔧 PENDIENTE: Almacenar resultados en DB (nueva tabla `ndvi_analysis`)
-- 🔧 PENDIENTE: API REST para solicitar procesamiento
-
-### 🟡 OE3: Análisis Espacial (Filtrado Convolucional)
-**Estado:** PARCIAL
-- ✓ Prototipo de filtro en notebook 02
-- 🔧 PENDIENTE: Servicio de extracción de características
-- 🔧 PENDIENTE: Pipeline automatizado feature → DB
-
-### 🟡 OE4: Modelo IA de Clasificación
-**Estado:** EN DESARROLLO
-- ✓ U-Net implementada (notebook 01 sintético)
-- ✓ Pipeline clasificación salud (Critical/Alert/Healthy)
-- 🔧 PENDIENTE: Entrenar con datos reales
-- 🔧 PENDIENTE: Servicio de inferencia (`backend/app/services/ml_service.py`)
-- 🔧 PENDIENTE: Guardar modelos en `backend/models/trained/`
-
-### ❌ OE5: Evaluación Calidad (Nubosidad)
-**Estado:** NO INICIADO
-- 🔧 PENDIENTE: Servicio de detección de nubes
-- 🔧 PENDIENTE: Score de confiabilidad
-- 🔧 PENDIENTE: Selección automática fechas alternativas
-
-### 🟢 OE6: Interfaz de Usuario
-**Estado:** BASE IMPLEMENTADA
-- ✓ Mapa Leaflet con dibujo de polígonos
-- ✓ Gestión de parcelas (CRUD)
-- ✓ Next.js + TypeScript
-- 🔧 PENDIENTE: Vista de resultados NDVI
-- 🔧 PENDIENTE: Comparación temporal
-- 🔧 PENDIENTE: Exportación de resultados
-- 🔧 PENDIENTE: Refactorizar componentes existentes a metodología molecular
-
-### ❌ OE7: Validación
-**Estado:** NO INICIADO
-- 🔧 PENDIENTE: Métricas cuantitativas (IoU, Dice ya en notebook)
-- 🔧 PENDIENTE: Análisis coherencia espacial
-- 🔧 PENDIENTE: Evaluación consistencia temporal
-
----
-
-## 🚦 PRÓXIMOS HITOS CRÍTICOS (Orden de prioridad)
-
-### SPRINT 1: Cerrar OE1 (Adquisición)
-
-Crear: `backend/app/services/sentinel_service.py`
-
-```python
-class SentinelService:
-    async def download_imagery(polygon_id, start_date, end_date)
-    async def authenticate()
-    async def check_availability()
-```
-
-**Endpoint:** `POST /api/sentinel/download`
-**Tests:** `tests/test_sentinel_service.py`
-
-### SPRINT 2: Cerrar OE2 (Procesamiento)
-
-Crear: `backend/app/services/ndvi_service.py`
-
-```python
-class NDVIService:
-    async def calculate_ndvi(imagery_id)
-    async def segment_vegetation(ndvi_raster)
-    async def store_results(polygon_id, ndvi_data)
-```
-
-**Nueva tabla DB:**
-
-```python
-# backend/app/models/ndvi_analysis.py
-class NDVIAnalysis(SQLModel, table=True):
-    id: int
-    polygon_id: int  # FK a Polygon
-    date: datetime
-    ndvi_raster: bytes  # GeoTIFF comprimido
-    vegetation_mask: bytes
-    avg_ndvi: float
-```
-
-### SPRINT 3: Integrar OE4 (IA)
-- Entrenar U-Net con datos reales
-- Crear `ml_service.py` con inferencia
-- Endpoint de clasificación
-
-### SPRINT 4: Completar OE6 (UI)
-- Refactorizar componentes existentes a metodología molecular
-- Componente visualización NDVI
-- Timeline comparación temporal
-- Exportación GeoTIFF/PNG
-
----
-
-## 📐 DECISIONES ARQUITECTÓNICAS CLAVE
-
-### Procesamiento de imágenes
-- **Almacenamiento:** PostgreSQL con bytea (< 10MB) o S3 (> 10MB)
-- **Formato interno:** GeoTIFF comprimido (LZW)
-- **Coordenadas:** Siempre WGS84 (EPSG:4326)
-
-### Machine Learning
-- **Framework:** TensorFlow (ya en requirements)
-- **Modelo productivo:** Formato SavedModel en `backend/models/trained/`
-- **Versionado:** MLflow (a implementar en OE7)
-
-### API de resultados
-
-```typescript
-// Ejemplo respuesta /api/analysis/{polygon_id}
-{
-  "polygon_id": 123,
-  "date": "2024-01-15",
-  "ndvi_stats": {
-    "mean": 0.65,
-    "std": 0.12,
-    "vegetated_area_m2": 15000
-  },
-  "health_classification": {
-    "critical_pct": 5,
-    "alert_pct": 20,
-    "healthy_pct": 75
-  },
-  "quality_score": 0.92,  // OE5
-  "download_urls": {
-    "ndvi_map": "/static/ndvi_123_2024-01-15.tif",
-    "health_map": "/static/health_123_2024-01-15.png"
-  }
+**Ejemplo correcto:**
+```tsx
+// ✅ components/atoms/DateSelector.tsx (pequeño, reutilizable)
+interface DateSelectorProps {
+  dates: string[];
+  onSelect: (date: string) => void;
+}
+export default function DateSelector({ dates, onSelect }: DateSelectorProps) {
+  return (
+    <select onChange={(e) => onSelect(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+      {dates.map(d => <option key={d} value={d}>{d}</option>)}
+    </select>
+  );
 }
 ```
 
 ---
 
-## 🧪 CRITERIOS DE VALIDACIÓN (OE7)
+## 🔑 REGLAS DE DATOS
 
-### Métricas cuantitativas
-- IoU segmentación > 0.75
-- Dice coefficient > 0.80
-- Accuracy clasificación > 85%
-
-### Coherencia espacial
-- No fragmentación excesiva (filtro morfológico)
-- Continuidad geométrica en parcelas contiguas
-
-### Consistencia temporal
-- Variación NDVI < 0.15 entre días consecutivos (sin eventos climáticos)
-- Tendencias coherentes con estacionalidad
-
----
-
-## 🔍 DEBUGGING COMÚN
-
-### Error: Coordenadas invertidas
-
-```python
-# ❌ Incorrecto
-coords = [[lat, lon], ...]  
-
-# ✅ Correcto (GeoJSON spec)
-coords = [[lon, lat], ...]
 ```
+# Coordenadas — SIEMPRE
+GeoJSON / Backend / Sentinel-2:  [lng, lat]  ← estándar
+Leaflet frontend:                 [lat, lng]  ← excepción
 
-### Error: NDVI fuera de rango
+# Usar siempre las utilidades ya implementadas:
+import { leafletToGeoJSON, geoJSONToLeaflet } from '@/utils/coordUtils'
 
-```python
-# Validar siempre
-assert -1 <= ndvi.mean() <= 1, "NDVI calculation error"
-```
+# NDVI — validar siempre
+assert -1 <= ndvi.mean() <= 1, "Error en normalización NDVI"
 
-### Error: Async/Await en servicios
-
-```python
-# ✅ Correcto
-async with AsyncSession(engine) as session:
-    result = await session.execute(query)
-
-# ❌ Incorrecto
-session = SessionLocal()  # Sync session
+# Imágenes — siempre TIFF, nunca PNG
+# TIFF preserva precisión float para análisis
 ```
 
 ---
 
-## 📚 RECURSOS DE REFERENCIA
+## 💬 FORMATO DE RESPUESTA
 
-- [Sentinel-2 User Handbook](https://sentinel.esa.int/web/sentinel/user-guides/sentinel-2-msi)
-- [NDVI Theory](https://custom-scripts.sentinel-hub.com/custom-scripts/sentinel-2/ndvi/)
-- [FastAPI Best Practices](https://github.com/zhanymkanov/fastapi-best-practices)
-- U-Net Paper: Ronneberger et al. (2015)
-- [Atomic Design Methodology](https://bradfrost.com/blog/post/atomic-web-design/)
+Cada vez que generes código incluye siempre:
 
----
-
-## 🎓 CONTEXTO ACADÉMICO PEG
-
-**Universidad:** [Tu Universidad]
-**Tutor:** [Nombre del Tutor]
-**Fecha defensa estimada:** [Fecha]
-
-**Entregables clave:**
-1. Código fuente completo (GitHub)
-2. Documentación técnica
-3. Manual de usuario
-4. Dataset validación + resultados
-5. Presentación defensa
-
----
-
-## 💡 EJEMPLOS DE USO
-
-### Ejemplo 1: Solicitar componente frontend
-
-**Usuario escribe:**
 ```
-Necesito un botón para descargar imágenes satelitales
-```
+🎯 OE avanzado: OE1 (Identificar escenas Sentinel-2)
 
-**Claude debe responder:**
-```
-🎯 Objetivo: OE6 (Interfaz de usuario)
-
-📁 Crear archivo: frontend/app/components/atoms/DownloadButton.tsx
-
-📝 Este botón será reutilizable para cualquier descarga.
-Usa Tailwind con efecto hover y un ícono.
-
-[CÓDIGO DEL COMPONENTE]
-
-✅ Próximo paso:
-¿Quieres que cree un componente "molecule" que combine
-este botón con un selector de fechas?
-```
-
-### Ejemplo 2: Solicitar lógica backend
-
-**Usuario escribe:**
-```
-Necesito calcular el NDVI de una parcela
-```
-
-**Claude debe responder:**
-```
-🎯 Objetivo: OE2 (Procesamiento - Cálculo NDVI)
-
-📁 Crear archivos:
-1. backend/app/services/ndvi_service.py (la lógica)
-2. backend/app/api/endpoints/ndvi.py (el endpoint)
+📁 Archivo: backend/app/services/sentinel_service.py
 
 📝 ¿Qué hace?
-El servicio recibe las bandas Red y NIR del satélite,
-calcula (NIR - Red)/(NIR + Red) y devuelve un número
-entre -1 y 1 que indica salud de la planta.
+[Explicación en español simple de qué resuelve este código]
 
-[CÓDIGO SERVICIO]
-[CÓDIGO ENDPOINT]
+[CÓDIGO]
 
-✅ Próximo paso:
-Ahora deberías crear un componente en el frontend que
-llame a este endpoint y muestre el resultado en un mapa.
-¿Lo genero?
-```
+✅ Evidencia de cumplimiento:
+[Cómo se demuestra que esto funciona — test, resultado, tabla]
 
-### Ejemplo 3: Comando @ESTADO
-
-**Usuario escribe:**
-```
-@ESTADO
-```
-
-**Claude debe responder:**
-```
-📊 ESTADO DE TU PEG
-
-✅ OE1: Adquisición Sentinel-2 → 70% (falta crear endpoint API)
-✅ OE6: Interfaz → 40% (tienes mapa, falta vista de resultados)
-❌ OE2: Cálculo NDVI → 0%
-❌ OE3: Análisis texturas → 0%
-❌ OE4: IA → 10% (solo tienes el notebook)
-❌ OE5: Detección nubes → 0%
-❌ OE7: Validación → 0%
-
-💡 Recomendación: Enfócate en completar OE1 (casi listo)
-   luego continúa con OE2 que es crítico para tu proyecto.
+➡️ Próximo paso:
+[Qué hacer después]
 ```
 
 ---
 
-## ✅ CHECKLIST ANTES DE CADA RESPUESTA
+## ⚙️ COMANDOS RÁPIDOS
 
-Antes de dar cualquier respuesta, verifica:
+| Comando | Acción |
+|---------|--------|
+| `@ESTADO` | Estado actual de los 5 OEs con porcentaje |
+| `@SIGUIENTE` | Próxima tarea prioritaria según el plan |
+| `@PLAN [tarea]` | Escribir plan en tasks/todo.md antes de implementar |
+| `@SERVICIO [nombre]` | Crear servicio backend nuevo |
+| `@COMPONENTE [nombre]` | Crear componente frontend nuevo |
+| `@LECCIONES` | Mostrar tasks/lessons.md del proyecto |
+
+---
+
+## 🚨 CHECKLIST ANTES DE CADA RESPUESTA
 
 - [ ] ¿Indiqué a qué OE pertenece esta tarea?
-- [ ] ¿Especifiqué la ruta exacta del archivo?
-- [ ] ¿Usé Tailwind en componentes frontend? (NO CSS)
-- [ ] ¿Dividí el componente si tiene más de 150 líneas?
-- [ ] ¿Separé lógica en services/ si es backend?
-- [ ] ¿Expliqué en español qué hace el código?
-- [ ] ¿Sugerí el próximo paso lógico?
+- [ ] ¿Escribí el plan en tasks/todo.md antes de implementar (si es no trivial)?
+- [ ] ¿La lógica está en `services/` y no en los endpoints?
+- [ ] ¿El frontend usa solo Tailwind (sin CSS puro)?
+- [ ] ¿El componente tiene menos de 200 líneas?
+- [ ] ¿Las coordenadas usan `[lng, lat]`?
+- [ ] ¿Hay evidencia medible de que funciona?
+- [ ] ¿Sugerí el próximo paso?
+
+---
+
+## 🧪 COMANDOS DE DESARROLLO
+
+```bash
+# Backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+pytest tests/ -v
+pytest tests/test_sentinel_service.py -v
+
+# Frontend
+npm run dev      # localhost:3000
+npm run build
+npm run lint
+
+# Docker
+docker-compose up
+docker-compose down
+```
+
+---
+
+## 🔍 DEBUGGING FRECUENTE
+
+```python
+# Coordenadas invertidas — Venezuela
+assert coords[0][0] < 0, "Longitud debe ser negativa (~-67)"
+
+# NDVI fuera de rango
+assert -1 <= ndvi.mean() <= 1, "Error en normalización NDVI"
+
+# Async session — siempre así
+async with AsyncSession(engine) as session:   # ✅
+    result = await session.execute(query)
+# SessionLocal() sincrónico                   # ❌
+```
+
+---
+
+## 📐 PRINCIPIOS CORE
+
+- **Simplicidad primero** — Cada cambio debe ser lo más simple posible. Impacto mínimo en el código.
+- **Sin atajos** — Encuentra la causa raíz. Sin parches temporales. Estándares de ingeniero senior.
+- **Impacto mínimo** — Los cambios solo tocan lo necesario. Evitar introducir nuevos bugs.

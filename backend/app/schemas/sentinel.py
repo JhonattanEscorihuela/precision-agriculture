@@ -1,104 +1,97 @@
 """
-Schemas Pydantic para las peticiones y respuestas de la API Sentinel-2.
+Schemas Pydantic para endpoints de Sentinel-2.
 """
 
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
-
-
-class SentinelDownloadRequest(BaseModel):
-    """
-    Esquema para solicitar descarga de imágenes Sentinel-2.
-    """
-    polygon_id: int = Field(..., description="ID del polígono en la base de datos")
-    start_date: str = Field(
-        ...,
-        description="Fecha de inicio en formato YYYY-MM-DD",
-        example="2024-01-15"
-    )
-    end_date: str = Field(
-        ...,
-        description="Fecha de fin en formato YYYY-MM-DD",
-        example="2024-01-20"
-    )
-    width: Optional[int] = Field(
-        512,
-        description="Ancho de la imagen en píxeles",
-        ge=1,
-        le=2500
-    )
-    height: Optional[int] = Field(
-        512,
-        description="Alto de la imagen en píxeles",
-        ge=1,
-        le=2500
-    )
-    max_cloud_coverage: Optional[int] = Field(
-        20,
-        description="Cobertura máxima de nubes permitida (0-100)",
-        ge=0,
-        le=100
-    )
-
-
-class NDVIDownloadRequest(SentinelDownloadRequest):
-    """
-    Esquema específico para solicitar descarga de NDVI.
-    Hereda todos los campos de SentinelDownloadRequest.
-    """
-    pass
-
-
-class BandsDownloadRequest(SentinelDownloadRequest):
-    """
-    Esquema para solicitar descarga de bandas específicas.
-    """
-    bands: List[str] = Field(
-        ...,
-        description="Lista de bandas a descargar (ej: ['B04', 'B08'])",
-        example=["B04", "B08"]
-    )
+from typing import List, Optional, Dict
 
 
 class AvailabilityCheckRequest(BaseModel):
-    """
-    Esquema para verificar disponibilidad de imágenes.
-    """
-    polygon_id: int = Field(..., description="ID del polígono en la base de datos")
-    start_date: str = Field(
-        ...,
-        description="Fecha de inicio en formato YYYY-MM-DD",
-        example="2024-01-15"
-    )
-    end_date: str = Field(
-        ...,
-        description="Fecha de fin en formato YYYY-MM-DD",
-        example="2024-01-20"
-    )
-    max_cloud_coverage: Optional[int] = Field(
-        20,
-        description="Cobertura máxima de nubes permitida (0-100)",
-        ge=0,
-        le=100
-    )
+    """Request para verificar disponibilidad de imágenes"""
+    polygon_id: int
+    start_date: str = Field(description="Fecha de inicio (YYYY-MM-DD)")
+    end_date: str = Field(description="Fecha de fin (YYYY-MM-DD)")
+    max_cloud_coverage: int = Field(default=20, ge=0, le=100)
 
 
 class AvailabilityResponse(BaseModel):
-    """
-    Respuesta de verificación de disponibilidad.
-    """
-    available: bool = Field(..., description="Si hay imágenes disponibles")
-    date_range: Dict[str, str] = Field(..., description="Rango de fechas consultado")
-    message: str = Field(..., description="Mensaje descriptivo del resultado")
-    polygon_id: int = Field(..., description="ID del polígono consultado")
+    """Response de disponibilidad de imágenes"""
+    available: bool
+    date_range: Dict[str, str]
+    message: str
+    polygon_id: int
+
+
+class NDVIDownloadRequest(BaseModel):
+    """Request para descargar NDVI"""
+    polygon_id: int
+    start_date: str = Field(description="Fecha de inicio (YYYY-MM-DD)")
+    end_date: str = Field(description="Fecha de fin (YYYY-MM-DD)")
+    width: int = Field(default=512, ge=10, le=2500)
+    height: int = Field(default=512, ge=10, le=2500)
+    max_cloud_coverage: int = Field(default=20, ge=0, le=100)
+
+
+class BandsDownloadRequest(BaseModel):
+    """Request para descargar bandas espectrales"""
+    polygon_id: int
+    bands: List[str] = Field(description="Lista de bandas (ej: ['B04', 'B08'])")
+    start_date: str = Field(description="Fecha de inicio (YYYY-MM-DD)")
+    end_date: str = Field(description="Fecha de fin (YYYY-MM-DD)")
+    width: int = Field(default=512, ge=10, le=2500)
+    height: int = Field(default=512, ge=10, le=2500)
+    max_cloud_coverage: int = Field(default=20, ge=0, le=100)
 
 
 class DownloadResponse(BaseModel):
-    """
-    Respuesta exitosa de descarga de imágenes.
-    """
-    success: bool = Field(True, description="Si la descarga fue exitosa")
-    message: str = Field(..., description="Mensaje descriptivo")
-    file_size_bytes: int = Field(..., description="Tamaño del archivo descargado")
-    polygon_id: int = Field(..., description="ID del polígono procesado")
-    date_range: Dict[str, str] = Field(..., description="Rango de fechas descargado")
+    """Response de descarga de imágenes"""
+    success: bool
+    message: str
+    file_size_bytes: int
+
+
+# ============================================================================
+# OE1 - Schemas para adquisición de bandas Sentinel-2
+# ============================================================================
+
+class DateInfo(BaseModel):
+    """Información de una fecha disponible"""
+    date: str = Field(description="Fecha en formato YYYY-MM-DD")
+    cloud_cover: float = Field(description="Porcentaje de cobertura de nubes (0-100)")
+    scene_id: str = Field(default="", description="ID de la escena Sentinel")
+    datetime: str = Field(default="", description="Timestamp completo ISO 8601")
+    acquired: bool = Field(default=False, description="Si esta fecha ya fue adquirida")
+
+
+class AvailableDatesRequest(BaseModel):
+    """Request para obtener fechas disponibles (via query params)"""
+    start_date: str = Field(description="Fecha de inicio (YYYY-MM-DD)")
+    end_date: str = Field(description="Fecha de fin (YYYY-MM-DD)")
+    max_cloud: int = Field(default=20, ge=0, le=100)
+
+
+class AvailableDatesResponse(BaseModel):
+    """Response con fechas disponibles"""
+    polygon_id: int
+    dates: List[DateInfo]
+    total_count: int
+    date_range: Dict[str, str]
+
+
+class AcquireBandsRequest(BaseModel):
+    """Request para adquirir bandas B04 y B08"""
+    polygon_id: int
+    date: str = Field(description="Fecha de adquisición (YYYY-MM-DD)")
+    width: int = Field(default=512, ge=10, le=2500)
+    height: int = Field(default=512, ge=10, le=2500)
+
+
+class AcquireBandsResponse(BaseModel):
+    """Response de adquisición de bandas"""
+    acquisition_id: int
+    polygon_id: int
+    date: str
+    cloud_coverage: float
+    size_b04_kb: float
+    size_b08_kb: float
+    already_existed: bool = Field(default=False, description="Si la adquisición ya existía")
