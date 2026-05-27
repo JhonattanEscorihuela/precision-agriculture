@@ -6,9 +6,6 @@ services:
     container_name: precision-agriculture-frontend
     ports:
       - "3000:3000" # Exponemos el frontend en el puerto 3000
-    volumes:
-      - ./frontend:/app # Sincronizamos el código fuente
-      - /app/node_modules # Usamos nodos locales
     environment:
       - NODE_ENV=development
     networks:

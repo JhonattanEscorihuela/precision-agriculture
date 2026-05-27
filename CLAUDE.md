@@ -277,13 +277,28 @@ Al completar el OE1 debes poder mostrar:
 
 ## 🔄 WORKFLOW DE TRABAJO
 
+### Git workflow (OBLIGATORIO)
+
+**Siempre trabajar en ramas feature:**
+
+1. **Crear rama** antes de empezar: `git checkout -b feature/nombre-descriptivo`
+2. **Trabajar en la rama** (commits, tests, validación)
+3. **Merge local** cuando esté completo: `git checkout main && git merge feature/nombre-descriptivo`
+4. **Push** a remoto: `git push origin main`
+5. **Limpiar** rama local (opcional): `git branch -d feature/nombre-descriptivo`
+
+❌ **NUNCA** hacer commits directos a main  
+✅ **SIEMPRE** usar feature branches
+
 ### Antes de implementar cualquier cosa
 
-1. Escribir plan en `tasks/todo.md`
-2. Confirmar plan antes de empezar
-3. Implementar por pasos verificables
-4. **Validar con tests Y docker-compose** (ambos obligatorios)
-5. Marcar completo solo con evidencia triple: tests + docker + prueba manual
+1. **Crear rama feature** con nombre descriptivo
+2. Escribir plan en `tasks/todo.md`
+3. Confirmar plan antes de empezar
+4. Implementar por pasos verificables
+5. **Validar con tests Y docker-compose** (ambos obligatorios)
+6. Marcar completo solo con evidencia triple: tests + docker + prueba manual
+7. **Merge a main y push**
 
 ### Estructura tasks/
 
@@ -319,6 +334,7 @@ Actualizar `tasks/lessons.md` con el patrón del error para no repetirlo.
 
 ## 🚨 ANTES DE CADA RESPUESTA — CHECKLIST
 
+- [ ] ¿Estoy trabajando en una rama feature?
 - [ ] ¿Indiqué a qué OE pertenece?
 - [ ] ¿Especifiqué la ruta exacta del archivo?
 - [ ] ¿La lógica va en services/, no en endpoints/?
@@ -328,6 +344,7 @@ Actualizar `tasks/lessons.md` con el patrón del error para no repetirlo.
 - [ ] ¿Validé con tests Y docker-compose?
 - [ ] ¿Probé el flujo manual end-to-end?
 - [ ] ¿Documenté evidencia en tasks/?
+- [ ] ¿Hice merge a main y push?
 - [ ] ¿Sugerí el próximo paso?
 
 ---
