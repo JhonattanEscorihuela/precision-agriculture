@@ -194,12 +194,62 @@
 4. Todas las requests incluyen `Authorization: Bearer {token}`
 5. Logout → borra localStorage → redirect /login
 
-### 🚀 Siguiente: OE2
+### 🚀 OE2 — Lecciones de planificación
+
+**Fecha:** 2026-06-08  
+**Estado:** Planificación completa, esperando confirmación para implementar
+
+#### 🔍 Errores detectados en revisión pre-implementación
+
+1. **Autenticación JWT olvidada en endpoints**
+   - **Problema:** Plan original no incluía `current_user = Depends(get_current_user)`
+   - **Consecuencia:** Usuario podría calcular NDVI de adquisiciones de otros usuarios
+   - **Lección:** SIEMPRE revisar autenticación en todos los endpoints que lean/modifiquen datos de usuario
+   - **Solución:** Agregado JWT + verificación de ownership en servicio
+
+2. **Inconsistencia en tipos de fechas**
+   - **Problema:** Plan usaba `calculation_date: str` mientras OE1 usa `datetime`
+   - **Consecuencia:** Queries complejas, inconsistencia en serialización
+   - **Lección:** Revisar tipos de datos de modelos relacionados antes de crear nuevos
+   - **Solución:** Cambiado a `datetime` con `default_factory=datetime.utcnow`
+
+3. **Tests sin fixtures preparados**
+   - **Problema:** `test_all_parcelas_ndvi` asumía adquisiciones existentes en BD
+   - **Consecuencia:** Test fallaría en BD limpia, no reproducible en CI/CD
+   - **Lección:** Tests unitarios deben ser auto-contenidos con fixtures sintéticos
+   - **Solución:** Fixture `synthetic_acquisition` + test de integración separado con `@pytest.mark.integration`
+
+4. **Endpoint faltante para consultar NDVI existentes**
+   - **Problema:** CRUD tenía `get_ndvi_by_polygon()` pero no había endpoint
+   - **Consecuencia:** Frontend no podría detectar si ya existe NDVI calculado
+   - **Lección:** Mapear todos los métodos CRUD a endpoints si son útiles para frontend
+   - **Solución:** Agregado `GET /ndvi/polygon/{polygon_id}`
+
+5. **Componente frontend sin gestión de estado "ya calculado"**
+   - **Problema:** `NDVIPanel` solo manejaba flujo "calcular → mostrar"
+   - **Consecuencia:** Re-cálculo innecesario al volver a abrir panel
+   - **Lección:** Componentes deben manejar estado existente, no solo flujo inicial
+   - **Solución:** State machine con detección automática al montar: `GET /ndvi/{acquisition_id}`
+
+#### 📋 Checklist de planificación para futuros OEs
+
+**Antes de implementar cualquier OE, verificar:**
+- [ ] Todos los endpoints tienen autenticación JWT
+- [ ] Servicios verifican ownership de recursos
+- [ ] Tipos de datos consistentes con modelos relacionados
+- [ ] Tests tienen fixtures auto-contenidos (no dependen de BD externa)
+- [ ] Tests de integración separados con marker `@pytest.mark.integration`
+- [ ] Endpoints mappean todos los métodos CRUD útiles para frontend
+- [ ] Componentes frontend manejan estados existentes (idle/loading/calculated/error)
+- [ ] Documentación de campos con validaciones especiales (ej: `std >= 0`)
+- [ ] Storybook/tests visuales solo si existe en el stack del proyecto
+
+#### 🎯 Próxima implementación: OE2
 
 Migrar cálculo NDVI de notebook a `ndvi_service.py`:
 - Leer B04 y B08 desde BD (usar `acquisition_id`)
-- Calcular NDVI: `(B08 - B04) / (B08 + B04)`
-- Guardar resultado en modelo `NDVIAnalysis`
-- Endpoint `POST /api/ndvi/calculate`
-- Frontend: Visualización NDVI con mapa de calor
+- Calcular NDVI: `(B08 - B04) / (B08 + B04)` con factor L2A
+- Guardar resultado en modelo `NDVIResult`
+- 4 endpoints: calculate, get stats, get by polygon, download TIFF
+- Frontend: Panel NDVI con estadísticos + escala colores + descarga
 - **VALIDAR:** Tests + docker-compose + prueba manual frontend responsive
