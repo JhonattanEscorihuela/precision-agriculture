@@ -8,6 +8,7 @@ import logging
 from app.models.user import User
 from app.models.polygon import Polygon
 from app.models.acquisition import SentinelAcquisition
+from app.models.analysis import NDVIResult  # OE2
 
 # Configurar logging
 logging.basicConfig(
