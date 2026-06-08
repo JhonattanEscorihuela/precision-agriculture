@@ -48,7 +48,7 @@ export default function Home() {
           <Map />
 
           {/* Hints flotantes - ocultos en mobile pequeño */}
-          <div className="hidden sm:flex absolute bottom-4 lg:bottom-6 left-4 lg:left-6 right-4 lg:right-6 gap-2 lg:gap-4 flex-wrap pointer-events-none z-[1000]">
+          {/* <div className="hidden sm:flex absolute bottom-4 lg:bottom-6 left-4 lg:left-6 right-4 lg:right-6 gap-2 lg:gap-4 flex-wrap pointer-events-none z-[1000]">
             <div className="flex items-center gap-2 px-3 lg:px-4 py-2 lg:py-3 bg-white/95 backdrop-blur-xl border border-satellite-blue/20 rounded-lg lg:rounded-xl shadow-lg text-xs lg:text-sm text-slate-800 font-medium pointer-events-auto">
               <span className="text-lg lg:text-xl">✏️</span>
               <span className="hidden md:inline">Usa la herramienta de dibujo para crear polígonos</span>
@@ -58,7 +58,7 @@ export default function Home() {
               <span className="text-lg lg:text-xl">🗺️</span>
               <span>Alterna entre capas de mapa</span>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </ProtectedRoute>

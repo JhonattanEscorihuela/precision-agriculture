@@ -57,8 +57,10 @@ Tu trabajo es ayudarme a construir código de calidad que cumpla con cada objeti
 
 ```
 tasks/
-├── todo.md      ← Plan activo con checkboxes por OE
-└── lessons.md   ← Errores corregidos y patrones aprendidos
+├── todo.md                        ← Plan activo con checkboxes por OE
+├── lessons.md                     ← Errores corregidos y patrones aprendidos
+├── tabla_evidencia_oe[N].csv      ← Evidencia medible generada al cerrar cada OE
+└── Reporte_OE[N]_Jhonattan_Escorihuela.docx ← Reporte Word generado al cerrar cada OE
 ```
 
 **Flujo obligatorio para cada tarea:**
@@ -68,6 +70,68 @@ tasks/
 4. **Explicar** → Resumen de alto nivel en cada paso
 5. **Documentar** → Agregar sección de revisión en `tasks/todo.md`
 6. **Aprender** → Actualizar `tasks/lessons.md` después de correcciones
+
+---
+
+## 📄 PROTOCOLO DE CIERRE DE OBJETIVO (OBLIGATORIO)
+
+> ⚠️ Este protocolo se activa ÚNICAMENTE cuando el usuario confirme explícitamente:
+> **"OE[N] aprobado"**, **"el OE[N] está completo"** o **"@CERRAR OE[N]"**
+> No ejecutar antes. No asumir. Esperar la confirmación explícita.
+
+### Cuando el usuario apruebe un OE, ejecutar en este orden:
+
+**Paso 1 — Recopilar datos reales del proyecto**
+- Leer todos los archivos creados o modificados para ese OE
+- Ejecutar la consulta de evidencia medible correspondiente:
+  - OE1: Consultar STAC API con las 3 parcelas del SRRG → tabla de fechas aptas
+  - OE2: Calcular estadísticas NDVI sobre parcelas de referencia → tabla de valores
+  - OE3: Ejecutar segmentación → tabla de áreas cultivadas por parcela
+  - OE4: Extraer descriptores → tabla de estadísticos por descriptor
+  - OE5: Verificar flujo completo → tabla de funcionalidades integradas
+- Guardar resultados en `tasks/tabla_evidencia_oe[N].csv`
+
+**Paso 2 — Generar reporte Word**
+- Crear `tasks/reporte_oe[N].js` con el documento completo usando la librería `docx` (npm)
+- El documento debe incluir:
+  1. Objetivo específico (texto aprobado por el tutor)
+  2. Actividades metodológicas (las 3 actividades del OE)
+  3. Implementación backend — tabla de componentes con descripción en prosa (sin código)
+  4. Implementación frontend — tabla de componentes con descripción en prosa (sin código)
+  5. Evidencia medible — tablas con datos reales obtenidos en el Paso 1
+  6. Resultados de tests de integración
+  7. Conclusiones — conectando con el OE siguiente
+- Ejecutar el script y guardar en `tasks/Reporte_OE[N]_Jhonattan_Escorihuela.docx`
+
+**Paso 3 — Actualizar estado del proyecto**
+- Marcar el OE como ✅ COMPLETO en CLAUDE.md con la evidencia obtenida
+- Actualizar `tasks/todo.md` cerrando todos los ítems del OE
+- Documentar lecciones aprendidas en `tasks/lessons.md`
+
+**Paso 4 — Confirmar al usuario**
+Responder con este resumen exacto:
+```
+✅ OE[N] cerrado oficialmente.
+
+📄 Reporte generado: tasks/Reporte_OE[N]_Jhonattan_Escorihuela.docx
+📊 Evidencia CSV:    tasks/tabla_evidencia_oe[N].csv
+
+Datos clave:
+- [Dato 1 concreto obtenido de ejecución real]
+- [Dato 2 concreto obtenido de ejecución real]
+- [Dato 3 concreto obtenido de ejecución real]
+
+➡️ Próximo objetivo: OE[N+1] — [descripción]
+¿Arrancamos con el plan?
+```
+
+### Reglas del protocolo
+- ❌ No ejecutar si el usuario no ha confirmado explícitamente que aprobó el OE
+- ❌ No sobreescribir un reporte existente sin confirmación del usuario
+- ❌ No inventar datos — todos los números deben venir de ejecución real
+- ✅ Si la consulta de evidencia falla, reportar el error y pedir instrucciones
+- ✅ El Word se genera con node usando la librería docx (igual que OE1)
+- ✅ Texto académico en español, sin portada, sin código en el documento
 
 ---
 
@@ -119,23 +183,7 @@ frontend/app/components/
 - ❌ Nunca estilos inline complejos
 - ✅ Siempre TypeScript
 - ✅ Siempre `ssr: false` en componentes con Leaflet
-
-**Ejemplo correcto:**
-```tsx
-// ✅ components/atoms/DateSelector.tsx (pequeño, reutilizable)
-interface DateSelectorProps {
-  dates: string[];
-  onSelect: (date: string) => void;
-}
-export default function DateSelector({ dates, onSelect }: DateSelectorProps) {
-  return (
-    <select onChange={(e) => onSelect(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
-      {dates.map(d => <option key={d} value={d}>{d}</option>)}
-    </select>
-  );
-}
-```
+- ✅ Siempre responsive — mobile-first, validar en 375px y 1920px
 
 ---
 
@@ -191,6 +239,7 @@ Cada vez que generes código incluye siempre:
 | `@SERVICIO [nombre]` | Crear servicio backend nuevo |
 | `@COMPONENTE [nombre]` | Crear componente frontend nuevo |
 | `@LECCIONES` | Mostrar tasks/lessons.md del proyecto |
+| `@CERRAR OE[N]` | Activar protocolo de cierre — solo si ya aprobaste el OE |
 
 ---
 

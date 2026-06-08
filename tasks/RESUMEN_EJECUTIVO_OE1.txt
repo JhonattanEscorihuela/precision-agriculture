@@ -1,0 +1,173 @@
+================================================================================
+RESUMEN EJECUTIVO - OE1 COMPLETADO
+================================================================================
+Proyecto: Aplicación web de agricultura de precisión - Análisis de cultivos
+          de arroz mediante imágenes satelitales Sentinel-2
+Fecha: 2026-06-03
+Estado: ✅ COMPLETADO Y VALIDADO
+
+================================================================================
+1. OBJETIVO ESPECÍFICO 1 (Taxonomía de Bloom N1-N2)
+================================================================================
+"Identificar escenas Sentinel-2 aptas via STAC API"
+
+ALCANCE:
+- Consultar metadatos de imágenes satelitales disponibles
+- Filtrar escenas por cobertura de nubes ≤ 20%
+- Descargar bandas espectrales B04 (Red) y B08 (NIR)
+- Almacenar bandas en base de datos para análisis posterior (OE2)
+
+================================================================================
+2. ARCHIVOS GENERADOS PARA EL REPORTE ACADÉMICO
+================================================================================
+
+📄 tasks/resumen_componentes_oe1.md
+   → Descripción detallada de los 11 componentes implementados
+   → Resultados concretos por archivo (líneas, funciones, endpoints)
+   → Métricas finales del OE1
+
+📊 tasks/tabla_disponibilidad_oe1.csv
+   → 64 registros de fechas aptas (parcela, fecha, nubosidad, apta)
+   → Evidencia cuantitativa de la actividad 3 del OE1
+   → Listo para importar a Excel/Word
+
+📋 tasks/datos_para_reporte_word.txt
+   → Datos concretos estructurados para copiar/pegar en Word
+   → Tablas, coordenadas, especificaciones técnicas
+   → Conclusiones y resultados cuantitativos
+
+📜 tasks/RESUMEN_EJECUTIVO_OE1.txt (este archivo)
+   → Vista general de alto nivel
+   → Próximos pasos hacia OE2
+
+================================================================================
+3. EVIDENCIA CUANTITATIVA PRINCIPAL
+================================================================================
+
+PARCELAS VALIDADAS:
+  ✅ Parcela 211 (2024-2025): 28 fechas aptas de 517 días consultados (5.4%)
+  ✅ Parcela 217 (2024):      9 fechas aptas de 365 días consultados (2.5%)
+  ✅ Parcela 85 (2025-2026):  27 fechas aptas de 516 días consultados (5.2%)
+
+TOTAL: 64 escenas Sentinel-2 identificadas con cloud_cover ≤ 20%
+
+COMPONENTES IMPLEMENTADOS:
+  Backend:  5 archivos (~1,738 líneas)
+  Frontend: 4 archivos (~481 líneas)
+  Total:    9 archivos (~2,219 líneas)
+
+ENDPOINTS REST:
+  ✅ GET  /api/sentinel/available-dates/{polygon_id}
+  ✅ POST /api/sentinel/acquire
+
+TESTS:
+  ✅ 4 tests de integración pasados
+  ✅ Validados contra APIs reales de Copernicus
+
+FLUJO END-TO-END:
+  ✅ Usuario dibuja polígono → consulta fechas → selecciona → descarga
+  ✅ Validado en docker-compose (backend + frontend + db)
+
+================================================================================
+4. TECNOLOGÍAS UTILIZADAS
+================================================================================
+
+APIs EXTERNAS:
+  • STAC API (Copernicus) - Consulta de metadatos
+  • Process API (Sentinel Hub) - Descarga de bandas
+  • OAuth2 (Copernicus Identity) - Autenticación
+
+BACKEND:
+  • FastAPI (async)
+  • PostgreSQL (bytea storage)
+  • SQLModel (ORM + validación)
+  • httpx (HTTP async)
+  • pytest-asyncio
+
+FRONTEND:
+  • Next.js 16 (App Router)
+  • React 19 (componentes cliente)
+  • TypeScript
+  • Tailwind CSS
+  • Leaflet
+
+ARQUITECTURA:
+  • Atomic Design (atoms → molecules → organisms)
+  • Separación de responsabilidades (services → crud → endpoints)
+  • Responsive (mobile bottom sheet, desktop sidebar)
+
+================================================================================
+5. PRÓXIMOS PASOS → OE2
+================================================================================
+
+Con las bandas B04 y B08 almacenadas en BD, el OE2 puede proceder a:
+
+OE2 - APLICAR CÁLCULO DE ÍNDICES ESPECTRALES (NDVI)
+  1. Leer bandas desde BD (ya disponibles gracias a OE1)
+  2. Calcular NDVI = (B08 - B04) / (B08 + B04)
+  3. Normalizar valores a rango [-1, 1]
+  4. Clasificar salud: Critical / Alert / Healthy
+  5. Generar visualización coloreada (rojo/amarillo/verde)
+  6. Permitir comparación temporal (evolución del cultivo)
+
+ARCHIVOS A CREAR (OE2):
+  - backend/app/services/ndvi_service.py
+  - frontend/app/components/organisms/NDVIVisualization.tsx
+  - backend/tests/test_ndvi_service.py
+
+NOTA: El prototipo de NDVI ya existe en notebook, solo requiere migración
+      a servicio FastAPI e integración con frontend.
+
+================================================================================
+6. LECCIONES APRENDIDAS (DOCUMENTADAS EN tasks/lessons.md)
+================================================================================
+
+✅ Docker-compose es crítico para validación end-to-end
+   → Tests pasando NO garantiza sistema completo funcionando
+
+✅ Nubosidad en zona tropical requiere criterio ajustado
+   → 20% max (vs 10-15% estándar Europa) para tener fechas suficientes
+
+✅ Fechas inteligentes mejoran UX
+   → -6 meses desde hoy, primer día del mes, bloquear fechas futuras
+
+✅ Responsive requiere diseños duales
+   → Mobile: bottom sheet con overlay
+   → Desktop: sidebar con backdrop opcional
+
+✅ STAC API agrupa múltiples tiles por fecha
+   → Necesario deduplicar y quedarse con menor nubosidad
+
+================================================================================
+7. COMANDOS PARA REGENERAR EVIDENCIA
+================================================================================
+
+# Regenerar tabla CSV de disponibilidad:
+python3 tasks/generate_oe1_table.py
+
+# Ejecutar tests de integración OE1:
+cd backend && pytest tests/test_sentinel_service.py -v
+
+# Validar sistema completo en Docker:
+docker-compose down -v && docker-compose up --build
+
+# Verificar endpoints:
+curl http://localhost:8000/api/sentinel/available-dates/1?start_date=2025-01-01&end_date=2025-06-01
+curl -X POST http://localhost:8000/api/sentinel/acquire -d '{"polygon_id":1,"date":"2025-01-23"}'
+
+================================================================================
+8. CONTACTO Y REFERENCIAS
+================================================================================
+
+Repositorio: [ruta del repositorio git]
+Documentación del proyecto: CLAUDE.md
+Instrucciones de setup: README.md
+Especificación Copernicus: https://dataspace.copernicus.eu/
+
+Tutor: [nombre del tutor]
+Estudiante: [tu nombre]
+Universidad: [nombre universidad]
+
+================================================================================
+FIN DEL RESUMEN EJECUTIVO - OE1
+================================================================================
