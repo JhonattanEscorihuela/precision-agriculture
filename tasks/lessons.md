@@ -283,9 +283,29 @@
 - [ ] Documentación de campos con validaciones especiales (ej: `std >= 0`)
 - [ ] Storybook/tests visuales solo si existe en el stack del proyecto
 
-#### 🎯 Próxima implementación: OE2
+#### 🎯 OE2 — Fase 1 en progreso (2026-06-08)
 
-Migrar cálculo NDVI de notebook a `ndvi_service.py`:
+**Completado:**
+- ✅ Modelo NDVIResult (datetime, UNIQUE constraint)
+- ✅ CRUD ndvi.py (5 operaciones)
+- ✅ Tests unitarios (fixtures encadenados, TIFFs sintéticos)
+- ✅ Main.py actualizado, requirements.txt con numpy/rasterio/aiosqlite
+
+**Lecciones Docker - OE2:**
+
+11. **Rasterio requiere GDAL en Docker**
+    - **Problema:** rasterio 1.3.9 falla al compilar con "ModuleNotFoundError: No module named 'pkg_resources'"
+    - **Consecuencia:** docker-compose build falla, backend no levanta
+    - **Lección:** Rasterio es un wrapper de GDAL y necesita dependencias del sistema + versión correcta
+    - **Solución:**
+      - Agregar a Dockerfile: `gdal-bin libgdal-dev python3-gdal`
+      - Actualizar rasterio: 1.3.9 → 1.4.3 (wheels pre-compilados)
+      - Instalar setuptools antes: `pip install --upgrade pip setuptools wheel`
+      - Agregar setuptools a requirements.txt: `setuptools>=65.5.0`
+
+**Próxima implementación: OE2 Fase 2**
+
+Implementar `ndvi_service.py`:
 - Leer B04 y B08 desde BD (usar `acquisition_id`)
 - Calcular NDVI: `(B08 - B04) / (B08 + B04)` con factor L2A
 - Guardar resultado en modelo `NDVIResult`

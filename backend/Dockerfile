@@ -5,12 +5,13 @@ WORKDIR /app
 # Añadir capa de dependencias por separado y evitar problemas de red en apt-get
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev wget curl \
+    gdal-bin libgdal-dev python3-gdal \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requisitos y actualizarlos por separado
 COPY requirements.txt requirements.txt
-RUN python -m pip install --upgrade pip && \
+RUN python -m pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copiar el resto del código
