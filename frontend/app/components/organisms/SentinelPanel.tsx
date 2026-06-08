@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import DateSelector from '../molecules/DateSelector';
 import AcquireButton from '../molecules/AcquireButton';
+import NDVIPanel from './NDVIPanel';
 
 interface DateInfo {
   date: string;
@@ -52,6 +53,7 @@ export default function SentinelPanel({
   const [acquisitionSuccess, setAcquisitionSuccess] = useState(false);
   const [acquisitionError, setAcquisitionError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [lastAcquisitionId, setLastAcquisitionId] = useState<number | null>(null);
 
   // Resetear completamente cuando cambia la parcela
   useEffect(() => {
@@ -141,6 +143,11 @@ export default function SentinelPanel({
       const data = await response.json();
       console.log('Acquisition successful:', data);
       setAcquisitionSuccess(true);
+
+      // Guardar acquisition_id para mostrar el panel NDVI
+      if (data.acquisition_id) {
+        setLastAcquisitionId(data.acquisition_id);
+      }
 
       // Si ya existía, mostrar mensaje diferente
       if (data.already_existed) {
@@ -246,9 +253,25 @@ export default function SentinelPanel({
           </div>
 
           {/* Mensajes de error */}
-          {errorMessage && (
+          {errorMessage && !acquisitionError && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-yellow-800 text-sm">{errorMessage}</p>
+            </div>
+          )}
+
+          {acquisitionError && errorMessage && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
               <p className="text-red-800 text-sm">{errorMessage}</p>
+            </div>
+          )}
+
+          {/* Panel NDVI - Mostrar después de adquisición exitosa */}
+          {acquisitionSuccess && lastAcquisitionId && (
+            <div className="mt-6">
+              <NDVIPanel
+                acquisitionId={lastAcquisitionId}
+                polygonId={polygonId}
+              />
             </div>
           )}
         </div>
