@@ -19,9 +19,9 @@ Usuario puede:
 
 ---
 
-## ✅ CORRECCIONES APLICADAS (Revisión pre-implementación)
+## ✅ CORRECCIONES APLICADAS (Revisiones pre-implementación)
 
-### 🔴 Problemas críticos corregidos
+### 🔴 Problemas críticos corregidos — Revisión 1
 
 1. **Autenticación JWT agregada:** Todos los endpoints ahora requieren `current_user = Depends(get_current_user)`. El servicio valida ownership antes de operar.
 
@@ -29,7 +29,7 @@ Usuario puede:
 
 3. **Fixtures de tests:** Agregado `synthetic_acquisition` para tests unitarios rápidos + test de integración separado con datos reales (`@pytest.mark.integration`).
 
-### 🟡 Mejoras implementadas
+### 🟡 Mejoras implementadas — Revisión 1
 
 4. **Documentación `ndvi_std`:** Agregada descripción explícita que puede ser 0.0 si imagen uniforme.
 
@@ -38,6 +38,22 @@ Usuario puede:
 6. **Endpoint `/polygon/{polygon_id}` agregado:** Permite al frontend verificar si ya existe NDVI antes de mostrar botón.
 
 7. **Estados del NDVIPanel:** Implementado state machine `idle → loading → calculated → error` con detección automática de NDVI existente al montar.
+
+---
+
+### 🔴 Problemas críticos corregidos — Revisión 2
+
+8. **Conflicto de rutas FastAPI:** Documentado orden de registro crítico. `/polygon/{polygon_id}` DEBE registrarse ANTES de `/{acquisition_id}` para evitar 422 Unprocessable Entity.
+
+9. **Fixture no persiste en BD:** Corregido `synthetic_acquisition` para usar `async`, `db.add()`, `await db.commit()`. Agregados fixtures encadenados: `test_user → test_polygon → synthetic_acquisition`.
+
+### 🟡 Refinamientos implementados — Revisión 2
+
+10. **Manejo de nodata:** Agregado enmascaramiento de píxeles `nodata` (típicamente 0 en Sentinel-2 L2A) en cálculo de estadísticos.
+
+11. **calculation_date en raíz de response:** Agregado a `NDVICalculateResponse` para acceso directo del frontend sin GET adicional.
+
+12. **Idempotencia en POST /calculate:** Servicio verifica si ya existe NDVI y lo retorna sin recalcular. Previene errores de UNIQUE constraint en doble click.
 
 ---
 
@@ -166,6 +182,9 @@ class NDVIService:
         """
         Calcula NDVI para una adquisición existente.
         
+        IDEMPOTENTE: Si ya existe NDVI para este acquisition_id, lo retorna
+        sin recalcular. Esto previene errores de UNIQUE constraint y mejora UX.
+        
         Args:
             acquisition_id: ID de la adquisición Sentinel-2
             user_id: ID del usuario (para verificar ownership)
@@ -180,9 +199,14 @@ class NDVIService:
             ValueError: Si NDVI fuera de rango [-1, 1]
             ValueError: Si bandas tienen dimensiones diferentes
         """
-        # 1. Obtener adquisición
-        # 2. Verificar ownership: polygon.user_id == user_id
-        # 3. Calcular NDVI
+        # 1. Verificar si ya existe NDVI (idempotencia)
+        existing = await crud_ndvi.get_ndvi_by_acquisition(db, acquisition_id)
+        if existing:
+            return existing
+        
+        # 2. Obtener adquisición
+        # 3. Verificar ownership: polygon.user_id == user_id
+        # 4. Calcular NDVI
         pass
     
     async def get_ndvi_stats(
@@ -217,14 +241,24 @@ acquisition = await acquisition_crud.get_acquisition_by_id(db, acquisition_id)
 import io
 import rasterio
 
-b04_array = rasterio.open(io.BytesIO(acquisition.b04_data)).read(1)
-b08_array = rasterio.open(io.BytesIO(acquisition.b08_data)).read(1)
-
-# Preservar metadatos para output
+# Leer bandas y metadatos
 with rasterio.open(io.BytesIO(acquisition.b04_data)) as src:
+    b04_array = src.read(1)
+    nodata_b04 = src.nodata  # típicamente 0 en Sentinel-2 L2A
     profile = src.profile
     transform = src.transform
     crs = src.crs
+
+with rasterio.open(io.BytesIO(acquisition.b08_data)) as src:
+    b08_array = src.read(1)
+    nodata_b08 = src.nodata
+
+# Crear máscara de píxeles nodata
+nodata_mask = np.zeros_like(b04_array, dtype=bool)
+if nodata_b04 is not None:
+    nodata_mask |= (b04_array == nodata_b04)
+if nodata_b08 is not None:
+    nodata_mask |= (b08_array == nodata_b08)
 ```
 
 #### 3.2 Cálculo NDVI
@@ -254,9 +288,13 @@ assert ndvi.min() >= -1 and ndvi.max() <= 1, \
 
 #### 3.3 Cálculo de estadísticos
 ```python
-# Calcular sobre píxeles válidos (no NaN, dentro de [-1, 1])
-valid_mask = ~np.isnan(ndvi) & (ndvi >= -1) & (ndvi <= 1)
+# Calcular sobre píxeles válidos (no NaN, dentro de [-1, 1], no nodata)
+valid_mask = ~np.isnan(ndvi) & (ndvi >= -1) & (ndvi <= 1) & ~nodata_mask
 valid_pixels = ndvi[valid_mask]
+
+# Validar que hay píxeles válidos
+if len(valid_pixels) == 0:
+    raise ValueError("No hay píxeles válidos para calcular NDVI")
 
 stats = {
     "ndvi_mean": float(np.mean(valid_pixels)),
@@ -309,6 +347,7 @@ class NDVICalculateResponse(BaseModel):
     ndvi_id: int
     acquisition_id: int
     polygon_id: int
+    calculation_date: str  # En raíz para acceso directo del frontend
     stats: NDVIStatsResponse
     message: str = "NDVI calculado exitosamente"
 ```
@@ -320,10 +359,16 @@ class NDVICalculateResponse(BaseModel):
 ```python
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 from app.models.user import User
 from app.core.security import get_current_user
 
 router = APIRouter(prefix="/ndvi", tags=["NDVI"])
+
+# ⚠️ ORDEN CRÍTICO: Registrar rutas específicas ANTES de las genéricas
+# FastAPI evalúa rutas en orden de registro
+# Si /{acquisition_id} se registra antes que /polygon/{polygon_id},
+# FastAPI intentará convertir "polygon" a int y fallará con 422
 
 @router.post("/calculate", response_model=NDVICalculateResponse)
 async def calculate_ndvi(
@@ -336,25 +381,15 @@ async def calculate_ndvi(
     
     - Valida que acquisition_id existe
     - Verifica que adquisición pertenece al usuario actual
-    - Calcula NDVI con manejo de división por cero
+    - Si ya existe NDVI, retorna el existente (idempotente)
+    - Si no existe, calcula NDVI con manejo de división por cero
     - Guarda raster y estadísticos en BD
     - Retorna estadísticos calculados
     """
     # Llamar servicio pasando user_id para verificación de ownership
     pass
 
-@router.get("/{acquisition_id}", response_model=NDVIStatsResponse)
-async def get_ndvi_stats(
-    acquisition_id: int,
-    db: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Obtiene estadísticos NDVI si ya fueron calculados.
-    Verifica ownership antes de retornar.
-    """
-    pass
-
+# Ruta específica /polygon/{polygon_id} ANTES de la genérica /{acquisition_id}
 @router.get("/polygon/{polygon_id}", response_model=List[NDVIStatsResponse])
 async def get_ndvi_by_polygon(
     polygon_id: int,
@@ -365,6 +400,19 @@ async def get_ndvi_by_polygon(
     """
     Lista todos los NDVI calculados para un polígono.
     Útil para el frontend: verificar si ya existe NDVI antes de mostrar botón.
+    """
+    pass
+
+# Ruta genérica /{acquisition_id} DESPUÉS de las específicas
+@router.get("/{acquisition_id}", response_model=NDVIStatsResponse)
+async def get_ndvi_stats(
+    acquisition_id: int,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene estadísticos NDVI si ya fueron calculados.
+    Verifica ownership antes de retornar.
     """
     pass
 
@@ -485,19 +533,53 @@ async def test_all_parcelas_ndvi_real():
     """
     pass
 
-# Fixture para tests unitarios
+# Fixtures encadenados para tests unitarios
 @pytest.fixture
-def synthetic_acquisition(db):
+async def test_user(db: AsyncSession):
+    """Crea usuario de prueba en BD."""
+    from app.models.user import User
+    import bcrypt
+    
+    user = User(
+        email="test@example.com",
+        hashed_password=bcrypt.hashpw("test123".encode(), bcrypt.gensalt()).decode(),
+        full_name="Test User"
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+@pytest.fixture
+async def test_polygon(db: AsyncSession, test_user):
+    """Crea polígono de prueba asociado al usuario."""
+    from app.models.polygon import Polygon
+    
+    polygon = Polygon(
+        name="Test Parcela",
+        coordinates=PARCELA_211,  # coordenadas SRRG Venezuela
+        user_id=test_user.id
+    )
+    db.add(polygon)
+    await db.commit()
+    await db.refresh(polygon)
+    return polygon
+
+@pytest.fixture
+async def synthetic_acquisition(db: AsyncSession, test_polygon):
     """
     Crea adquisición con bandas sintéticas para tests unitarios.
     
     Genera B04 y B08 con valores realistas:
     - B04: 500-2000 (reflectancia roja)
     - B08: 1000-4000 (reflectancia NIR)
+    
+    Persiste en BD para que el servicio pueda consultarla.
     """
     import numpy as np
     import rasterio
     import io
+    from app.models.acquisition import SentinelAcquisition
     
     b04 = np.random.randint(500, 2000, (100, 100), dtype=np.uint16)
     b08 = np.random.randint(1000, 4000, (100, 100), dtype=np.uint16)
@@ -510,12 +592,13 @@ def synthetic_acquisition(db):
                           crs='EPSG:4326',
                           transform=rasterio.transform.from_bounds(
                               -67.6, 8.7, -67.5, 8.9, 100, 100
-                          )) as dst:
+                          ),
+                          nodata=0) as dst:  # nodata=0 para Sentinel-2 L2A
             dst.write(arr, 1)
         return buf.getvalue()
     
-    return SentinelAcquisition(
-        polygon_id=1,
+    acquisition = SentinelAcquisition(
+        polygon_id=test_polygon.id,
         acquisition_date=datetime(2025, 3, 15),
         cloud_coverage=15.0,
         b04_data=array_to_tiff(b04),
@@ -523,6 +606,10 @@ def synthetic_acquisition(db):
         width=100,
         height=100
     )
+    db.add(acquisition)
+    await db.commit()
+    await db.refresh(acquisition)
+    return acquisition
 ```
 
 ---

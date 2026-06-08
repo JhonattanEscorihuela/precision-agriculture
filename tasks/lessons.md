@@ -231,16 +231,55 @@
    - **Lección:** Componentes deben manejar estado existente, no solo flujo inicial
    - **Solución:** State machine con detección automática al montar: `GET /ndvi/{acquisition_id}`
 
+#### 🔴 Problemas críticos — Revisión 2 (2026-06-08)
+
+6. **Conflicto de rutas en FastAPI**
+   - **Problema:** `GET /{acquisition_id}` registrada antes de `GET /polygon/{polygon_id}`
+   - **Consecuencia:** FastAPI intenta convertir "polygon" a int → 422 Unprocessable Entity
+   - **Lección:** Rutas específicas SIEMPRE antes de genéricas en FastAPI
+   - **Solución:** Registrar `/polygon/{polygon_id}` ANTES de `/{acquisition_id}` + comentario explicativo
+
+7. **Fixture no persiste en BD**
+   - **Problema:** `synthetic_acquisition` creaba objeto en memoria pero no hacía `db.add()` + `commit()`
+   - **Consecuencia:** `crud.get_acquisition_by_id()` no encuentra nada → test falla
+   - **Lección:** Fixtures de tests unitarios deben persistir datos en BD si el servicio los consulta
+   - **Solución:** Fixture async + fixtures encadenados (user → polygon → acquisition)
+
+#### 🟡 Refinamientos — Revisión 2
+
+8. **Píxeles nodata contaminan estadísticos**
+   - **Problema:** Sentinel-2 L2A usa `nodata=0`, si no se enmascara contamina el cálculo
+   - **Consecuencia:** `ndvi_mean` sesgado, valores incorrectos
+   - **Lección:** Siempre leer y aplicar máscara de `nodata` antes de calcular estadísticos
+   - **Solución:** `nodata_mask = (b04 == nodata) | (b08 == nodata)` en `valid_mask`
+
+9. **calculation_date solo en nested object**
+   - **Problema:** Frontend debe hacer GET adicional para mostrar "Calculado el..."
+   - **Consecuencia:** UX más lenta, request innecesario
+   - **Lección:** Campos útiles para UI deben estar en raíz de response, no solo nested
+   - **Solución:** `calculation_date` en `NDVICalculateResponse` raíz + dentro de `stats`
+
+10. **POST /calculate no es idempotente**
+    - **Problema:** Doble click causa error de UNIQUE constraint en BD
+    - **Consecuencia:** Error crudo en lugar de respuesta limpia
+    - **Lección:** Operaciones POST que crean recursos únicos deben ser idempotentes
+    - **Solución:** Verificar existencia antes de calcular, retornar el existente si ya está
+
 #### 📋 Checklist de planificación para futuros OEs
 
 **Antes de implementar cualquier OE, verificar:**
 - [ ] Todos los endpoints tienen autenticación JWT
 - [ ] Servicios verifican ownership de recursos
 - [ ] Tipos de datos consistentes con modelos relacionados
-- [ ] Tests tienen fixtures auto-contenidos (no dependen de BD externa)
+- [ ] Tests tienen fixtures auto-contenidos que persisten en BD
+- [ ] Fixtures encadenados para FK dependencies (user → polygon → acquisition)
 - [ ] Tests de integración separados con marker `@pytest.mark.integration`
 - [ ] Endpoints mappean todos los métodos CRUD útiles para frontend
+- [ ] Rutas FastAPI específicas registradas ANTES de genéricas
 - [ ] Componentes frontend manejan estados existentes (idle/loading/calculated/error)
+- [ ] Operaciones POST con UNIQUE constraints son idempotentes
+- [ ] Manejo de nodata en procesamiento de rasters
+- [ ] Campos útiles para UI en raíz de responses (no solo nested)
 - [ ] Documentación de campos con validaciones especiales (ej: `std >= 0`)
 - [ ] Storybook/tests visuales solo si existe en el stack del proyecto
 
