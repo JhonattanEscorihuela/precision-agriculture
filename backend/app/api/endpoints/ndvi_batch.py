@@ -11,7 +11,7 @@ from app.core.security import get_current_user
 from app.crud import polygon as crud_polygon
 from app.crud import acquisition as crud_acquisition
 from app.crud import ndvi as crud_ndvi
-from app.services.sentinel_service import SentinelService
+from app.services.sentinel import SentinelService
 from app.services.ndvi_service import NDVIService
 from pydantic import BaseModel
 from typing import List

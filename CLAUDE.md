@@ -231,7 +231,15 @@ backend/app/
 ├── models/            ← SQLModel (user.py, polygon.py, analysis.py)
 ├── schemas/           ← Pydantic request/response
 ├── services/          ← Toda la lógica de negocio
-│   ├── sentinel_service.py   ← OE1
+│   ├── sentinel/      ← OE1 (módulos: auth, stac_client, process_client, geometry, etc.)
+│   │   ├── __init__.py
+│   │   ├── sentinel_service.py    ← Orquestador principal
+│   │   ├── auth.py                ← Autenticación OAuth2
+│   │   ├── stac_client.py         ← Cliente STAC API
+│   │   ├── process_client.py      ← Cliente Process API
+│   │   ├── geometry.py            ← Cálculos geométricos (reutilizable OE3/OE4)
+│   │   ├── request_builder.py     ← Constructor payloads
+│   │   └── logger_utils.py        ← Logging detallado
 │   ├── ndvi_service.py       ← OE2
 │   ├── segmentation_service.py ← OE3
 │   ├── texture_service.py    ← OE4
@@ -243,6 +251,7 @@ backend/app/
 - ❌ Nunca lógica en endpoints
 - ❌ Nunca queries de BD fuera de crud/
 - ✅ Endpoints llaman a services, services llaman a crud
+- ✅ Servicios grandes (>500 líneas) → modularizar en package
 
 ---
 
