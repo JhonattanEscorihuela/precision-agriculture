@@ -22,9 +22,35 @@ interface NDVIStatsProps {
  * Incluye badge coloreado para el promedio y botón opcional de descarga.
  */
 export default function NDVIStats({ stats, onDownload }: NDVIStatsProps) {
-  const StatItem = ({ label, value, isMean = false }: { label: string; value: number; isMean?: boolean }) => (
+  const StatItem = ({
+    label,
+    value,
+    isMean = false,
+    showTooltip = false
+  }: {
+    label: string;
+    value: number;
+    isMean?: boolean;
+    showTooltip?: boolean;
+  }) => (
     <div className="bg-white/50 backdrop-blur-sm rounded-lg p-4 border border-emerald-200">
-      <div className="text-xs text-gray-600 font-medium mb-2">{label}</div>
+      <div className="text-xs text-gray-600 font-medium mb-2 flex items-center gap-1">
+        {label}
+        {showTooltip && (
+          <div className="group relative">
+            <span className="text-blue-500 cursor-help">ℹ️</span>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-64 z-10">
+              <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg">
+                <p className="font-semibold mb-1">Valores negativos son normales</p>
+                <p>Pueden indicar agua, sombras o superficies no vegetativas dentro de la parcela (caminos, bordes, zonas sin siembra).</p>
+                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1">
+                  <div className="border-4 border-transparent border-t-gray-900"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       {isMean ? (
         <NDVIBadge value={value} size="lg" showLabel={false} />
       ) : (
@@ -40,7 +66,7 @@ export default function NDVIStats({ stats, onDownload }: NDVIStatsProps) {
       {/* Grid 2x2 de estadísticos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <StatItem label="📊 Promedio NDVI" value={stats.ndvi_mean} isMean />
-        <StatItem label="📉 Mínimo" value={stats.ndvi_min} />
+        <StatItem label="📉 Mínimo" value={stats.ndvi_min} showTooltip={stats.ndvi_min < 0} />
         <StatItem label="📈 Máximo" value={stats.ndvi_max} />
         <StatItem label="📏 Desv. Estándar" value={stats.ndvi_std} />
       </div>

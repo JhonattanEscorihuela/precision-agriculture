@@ -60,7 +60,8 @@ class DateInfo(BaseModel):
     cloud_cover: float = Field(description="Porcentaje de cobertura de nubes (0-100)")
     scene_id: str = Field(default="", description="ID de la escena Sentinel")
     datetime: str = Field(default="", description="Timestamp completo ISO 8601")
-    acquired: bool = Field(default=False, description="Si esta fecha ya fue adquirida")
+    acquired: bool = Field(default=False, description="Si esta fecha ya fue adquirida (bandas descargadas)")
+    ndvi_calculated: bool = Field(default=False, description="Si esta fecha ya tiene NDVI calculado")
 
 
 class AvailableDatesRequest(BaseModel):

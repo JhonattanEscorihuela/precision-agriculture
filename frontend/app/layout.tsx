@@ -24,7 +24,7 @@ export default function RootLayout({
               children
             ) : (
               // Con sidebar en páginas normales
-              <div className="flex min-h-screen bg-slate-50">
+              <div className="flex min-h-screen max-h-screen bg-slate-50 overflow-hidden">
                 <Sidebar />
                 <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-gradient-to-b from-slate-50 to-slate-100 relative">
                   <div className="fixed top-0 right-0 w-1/2 h-1/2 pointer-events-none z-0 decorative-radial-gradient" />

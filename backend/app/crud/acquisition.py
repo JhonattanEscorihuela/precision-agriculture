@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from typing import List, Optional
 from datetime import datetime
+import logging
 
 from app.models.acquisition import SentinelAcquisition, SentinelAcquisitionCreate
+
+logger = logging.getLogger(__name__)
 
 
 async def create_acquisition(
@@ -33,8 +36,7 @@ async def create_acquisition(
         return db_acquisition
     except Exception as e:
         await db.rollback()
-        import logging
-        logging.error(f"❌ Error creating acquisition: {str(e)}")
+        logger.error(f"❌ Error creating acquisition: {str(e)}")
         logging.error(f"   Data: {acquisition_data.dict()}")
         raise
 

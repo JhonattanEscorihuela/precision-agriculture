@@ -53,10 +53,10 @@ export default function Sidebar() {
 
             {/* Sidebar */}
             <div className={`
-                fixed lg:relative
-                h-screen w-[280px]
+                fixed lg:sticky lg:top-0
+                h-screen lg:min-h-screen w-[280px]
                 bg-gradient-to-br from-satellite-deep to-satellite-darker
-                flex flex-col overflow-hidden shadow-2xl
+                flex flex-col overflow-y-auto shadow-2xl
                 z-[1999]
                 transition-transform duration-300 ease-in-out
                 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}

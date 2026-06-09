@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.endpoints import polygons, auth, sentinel, ndvi  # Importa los routers
+from app.api.endpoints import polygons, auth, sentinel, ndvi, ndvi_batch  # Importa los routers
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
 import logging
@@ -32,6 +32,7 @@ app.include_router(polygons.router, prefix="/polygons", tags=["Polygons"])
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(sentinel.router, prefix="/api/sentinel", tags=["Sentinel-2"])
 app.include_router(ndvi.router, prefix="/api/ndvi", tags=["NDVI"])  # OE2
+app.include_router(ndvi_batch.router, prefix="/api/ndvi", tags=["NDVI Batch"])  # OE2 - Batch processing
 
 @app.on_event("startup")
 async def on_startup():

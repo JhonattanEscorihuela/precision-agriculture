@@ -6,6 +6,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/app/context/AuthContext';
 import axios from 'axios';
 import NDVIStats from '../molecules/NDVIStats';
 import NDVIColorScale from '../molecules/NDVIColorScale';
@@ -46,25 +47,71 @@ interface NDVIData {
  * 3. Usuario vuelve a abrir → muestra stats sin recalcular
  */
 export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPanelProps) {
+  const { token } = useAuth();
   const [state, setState] = useState<PanelState>('loading');
   const [ndviData, setNdviData] = useState<NDVIData | null>(null);
   const [error, setError] = useState<string>('');
+  const [alreadyFetched, setAlreadyFetched] = useState(false); // Caché local
 
-  // Al montar: verificar si ya existe NDVI calculado
+  // Al montar: verificar si ya existe NDVI calculado (solo una vez)
   useEffect(() => {
-    checkExistingNDVI();
-  }, [acquisitionId]);
+    if (!alreadyFetched) {
+      checkExistingNDVI();
+    }
+  }, [acquisitionId, alreadyFetched]);
 
-  const checkExistingNDVI = async () => {
+  const checkExistingNDVI = async (retryCount = 0) => {
+    if (!token) {
+      // Si no hay token, esperar un poco y reintentar (max 3 veces)
+      if (retryCount < 3) {
+        setTimeout(() => checkExistingNDVI(retryCount + 1), 300);
+        return;
+      }
+      setError('No autenticado');
+      setState('error');
+      return;
+    }
+
     try {
-      const response = await axios.get(`http://localhost:8000/api/ndvi/${acquisitionId}`);
-      setNdviData(response.data);
+      const response = await axios.get(`http://localhost:8000/api/ndvi/${acquisitionId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      // Mapear respuesta GET (estructura plana) a estructura esperada por el componente
+      const data = response.data;
+      setNdviData({
+        ndvi_id: data.acquisition_id, // GET no retorna ndvi_id, usar acquisition_id temporalmente
+        calculation_date: data.calculation_date,
+        stats: {
+          ndvi_mean: data.ndvi_mean,
+          ndvi_min: data.ndvi_min,
+          ndvi_max: data.ndvi_max,
+          ndvi_std: data.ndvi_std
+        }
+      });
       setState('calculated');
+      setAlreadyFetched(true); // Marcar como consultado (caché)
     } catch (err: any) {
       if (err.response?.status === 404) {
         // NDVI no existe, mostrar botón calcular
         setState('idle');
+        setAlreadyFetched(true); // Marcar como consultado
+      } else if (err.response?.status === 401) {
+        // Si es 401 y es primer intento, reintentar después de un delay
+        if (retryCount < 2) {
+          setTimeout(() => checkExistingNDVI(retryCount + 1), 500);
+          return;
+        }
+        setError('Sesión expirada. Por favor, inicia sesión nuevamente');
+        setState('error');
       } else {
+        // Otros errores, reintentar una vez
+        if (retryCount < 1) {
+          setTimeout(() => checkExistingNDVI(retryCount + 1), 300);
+          return;
+        }
         setError('Error al verificar NDVI existente');
         setState('error');
       }
@@ -72,12 +119,22 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
   };
 
   const calculateNDVI = async () => {
+    if (!token) {
+      setError('No autenticado');
+      setState('error');
+      return;
+    }
+
     setState('loading');
     setError('');
 
     try {
       const response = await axios.post('http://localhost:8000/api/ndvi/calculate', {
         acquisition_id: acquisitionId
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       });
 
       setNdviData({
@@ -87,16 +144,30 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
       });
       setState('calculated');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al calcular NDVI');
+      if (err.response?.status === 401) {
+        setError('Sesión expirada. Por favor, inicia sesión nuevamente');
+      } else {
+        setError(err.response?.data?.detail || 'Error al calcular NDVI');
+      }
       setState('error');
     }
   };
 
   const downloadTIFF = async () => {
+    if (!token) {
+      setError('No autenticado');
+      return;
+    }
+
     try {
       const response = await axios.get(
         `http://localhost:8000/api/ndvi/${acquisitionId}/tiff`,
-        { responseType: 'blob' }
+        {
+          responseType: 'blob',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
 
       // Crear link de descarga
@@ -108,7 +179,11 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
       link.click();
       link.remove();
     } catch (err: any) {
-      setError('Error al descargar TIFF');
+      if (err.response?.status === 401) {
+        setError('Sesión expirada');
+      } else {
+        setError('Error al descargar TIFF');
+      }
     }
   };
 

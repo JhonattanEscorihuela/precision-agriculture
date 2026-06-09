@@ -50,12 +50,7 @@ export const PolygonProvider = ({ children }: { children: React.ReactNode }) => 
         async (id: number, update: Partial<Omit<Polygon, 'id' | 'created_at' | 'updated_at'>>) => {
             try {
                 const { data } = await axios.put<Polygon>(`/polygons/${id}`, update);
-                // Forzar actualización del estado creando un nuevo array
-                setPolygons((prev) => {
-                    const newPolygons = prev.map((p) => (p.id === id ? { ...data } : p));
-                    console.log('Updated polygons:', newPolygons);
-                    return newPolygons;
-                });
+                setPolygons((prev) => prev.map((p) => (p.id === id ? { ...data } : p)));
             } catch (err) {
                 console.error('Error updating polygon:', err);
                 throw err;
@@ -68,12 +63,7 @@ export const PolygonProvider = ({ children }: { children: React.ReactNode }) => 
         async (id: number) => {
             try {
                 await axios.delete(`/polygons/${id}`);
-                // Forzar actualización del estado creando un nuevo array
-                setPolygons((prev) => {
-                    const newPolygons = prev.filter((p) => p.id !== id);
-                    console.log('Remaining polygons after delete:', newPolygons);
-                    return newPolygons;
-                });
+                setPolygons((prev) => prev.filter((p) => p.id !== id));
             } catch (err) {
                 console.error('Error deleting polygon:', err);
                 throw err;

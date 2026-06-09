@@ -7,6 +7,7 @@ interface DateInfo {
   date: string;
   cloud_cover: number;
   acquired: boolean;
+  ndvi_calculated: boolean;
 }
 
 interface DateSelectorProps {
@@ -63,6 +64,7 @@ export default function DateSelector({
             date={dateInfo.date}
             isSelected={selectedDate === dateInfo.date}
             isAcquired={dateInfo.acquired}
+            ndviCalculated={dateInfo.ndvi_calculated}
             onClick={() => onSelectDate(dateInfo.date)}
           />
         ))}

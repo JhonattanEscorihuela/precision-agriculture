@@ -69,23 +69,52 @@ La validación se distribuye como evidencia medible en cada OE.
 - ✅ AuthContext + PolygonContext funcionando
 - ✅ Axios interceptors para JWT automático
 
-### OE2 — Aplicar índices espectrales
-- ✅ Cálculo NDVI en notebook
-- 🔧 PENDIENTE: Migrar a `ndvi_service.py`
+### OE2 — Aplicar índices espectrales ✅ COMPLETO
+
+**Backend:**
+- ✅ Modelo `NDVIResult` en BD con UNIQUE constraint (acquisition_id)
+- ✅ CRUD completo para NDVI (`crud/ndvi.py`)
+- ✅ Servicio `ndvi_service.py` con cálculo NDVI (L2A scale factor, masking nodata)
+- ✅ 4 endpoints: calculate (idempotente), get stats, get by polygon, download TIFF
+- ✅ Validación rango [-1, 1], estadísticos (mean, min, max, std)
+- ✅ JOIN con SentinelAcquisition para obtener acquisition_date
+- ✅ Tests de integración con parcelas SRRG
+
+**Frontend:**
+- ✅ Componente `atoms/NDVIBadge.tsx` - Badge coloreado por valor NDVI
+- ✅ Componente `molecules/NDVIStats.tsx` - Grid estadísticos + tooltip valores negativos
+- ✅ Componente `molecules/NDVIColorScale.tsx` - Escala gradiente horizontal
+- ✅ Componente `organisms/NDVIPanel.tsx` - Panel cálculo + visualización (state machine)
+- ✅ Componente `organisms/NDVIEvolutionWidget.tsx` - Gráfica temporal Recharts (últimas 6 fechas)
+- ✅ Integración en `SentinelPanel.tsx` - Auto-mostrar después de adquisición
+- ✅ Página `/cultivos` - Lista parcelas con estado de salud real (basado en NDVI)
+- ✅ Página `/cultivos/[id]` - Dashboard individual con grid de widgets
+- ✅ Hook `usePolygonHealth.ts` - Estado de salud por parcela (healthy/alert/critical/unknown)
+- ✅ Util `geoUtils.ts` - Cálculo área parcelas (fórmula Shoelace)
+- ✅ Caché local en componentes (evita re-fetch innecesarios)
+- ✅ JWT auth en todas las peticiones NDVI
+
+**Librerías:**
+- ✅ `recharts@3.8.1` - Gráficas interactivas
+- ✅ `numpy==1.24.3` - Cálculo NDVI
+- ✅ `rasterio==1.4.3` - Lectura/escritura TIFF
 
 ### OE3 — Analizar segmentación espacial
 - ✅ Prototipo filtro convolucional en notebook
-- 🔧 PENDIENTE: Migrar a servicio
+- 🔧 PENDIENTE: Migrar a servicio + endpoints + widget dashboard
 
 ### OE4 — Evaluar descriptores de textura
 - ✅ U-Net implementada (datos sintéticos)
-- 🔧 PENDIENTE: Entrenar con datos reales
+- 🔧 PENDIENTE: Entrenar con datos reales + servicio + widget dashboard
 
 ### OE5 — Construir interfaz integrada
 - ✅ Mapa Leaflet con dibujo de polígonos
 - ✅ CRUD parcelas funcionando
 - ✅ Panel lateral de adquisición Sentinel-2 (OE1 frontend)
-- 🔧 PENDIENTE: Panel visualización NDVI, comparación temporal, exportación
+- ✅ Panel visualización NDVI (OE2 frontend)
+- ✅ Dashboard individual por parcela con widgets (patrón AWS CloudWatch)
+- ✅ Estado de salud basado en datos reales
+- 🔧 PENDIENTE: Comparación temporal multi-fecha, exportación reportes
 
 ---
 
@@ -137,6 +166,59 @@ PARCELA_85 = [
 - Período con menos nubes: diciembre-marzo (temporada seca)
 - Tests verificados: fechas aptas en 2025 con 20% tolerancia
 - Fecha actual de tests: 2026-05-23 (usar datos 2025-2026)
+
+---
+
+## 💾 ESTRATEGIA DE CACHÉ — OBLIGATORIO EN TODOS LOS OBJETIVOS
+
+**REGLA DE ORO:** Si cuesta > 2 segundos calcularlo, debe cachearse en BD.
+
+### 1. Idempotencia en endpoints de cálculo
+```python
+# POST siempre verificar si ya existe resultado
+existing = await crud.get_by_acquisition_id(db, acquisition_id)
+if existing:
+    return existing  # ✅ Retornar sin recalcular
+# Calcular solo si no existe
+result = calculate_expensive_operation()
+await crud.save(db, result)
+return result
+```
+
+### 2. BD como caché de resultados costosos
+- Guardar: NDVI, segmentaciones, descriptores de textura, máscaras ML
+- GET endpoints: Solo consultan BD, **nunca recalculan**
+- TTL: Infinito (datos satelitales no cambian)
+- Formato: TIFF para rasters, JSON para metadatos, WKB para geometrías
+
+### 3. Caché local en componentes React
+```typescript
+const [alreadyFetched, setAlreadyFetched] = useState(false);
+
+useEffect(() => {
+  if (!alreadyFetched) {
+    fetchData().then(() => setAlreadyFetched(true));
+  }
+}, [alreadyFetched]);
+```
+
+### 4. Queries optimizados (evitar N+1)
+```python
+# ❌ MAL: N+1 queries
+for ndvi in ndvi_list:
+    acquisition = await get_acquisition(ndvi.acquisition_id)
+
+# ✅ BIEN: JOIN en backend
+query = select(NDVI, Acquisition).join(Acquisition)
+```
+
+### 5. Considerar React Query/SWR para OE3+
+Solo si hay >10 peticiones redundantes por sesión.
+
+**Aplicar en:**
+- OE3: Segmentaciones (máscaras WKB en BD)
+- OE4: Descriptores textura (arrays JSON en BD)
+- OE5: Widgets leen datos cacheados
 
 ---
 

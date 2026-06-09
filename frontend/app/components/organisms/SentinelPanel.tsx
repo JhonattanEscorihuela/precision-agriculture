@@ -9,6 +9,7 @@ interface DateInfo {
   date: string;
   cloud_cover: number;
   acquired: boolean;
+  ndvi_calculated: boolean;
 }
 
 interface SentinelPanelProps {
@@ -89,11 +90,15 @@ export default function SentinelPanel({
     }
   }, [startDate, endDate]);
 
-  const fetchAvailableDates = async () => {
+  const fetchAvailableDates = async (resetAcquisitionState = true) => {
     setIsLoadingDates(true);
     setSelectedDate(null);
-    setAcquisitionSuccess(false);
-    setAcquisitionError(false);
+
+    // Solo resetear estado de adquisición si se solicita explícitamente
+    if (resetAcquisitionState) {
+      setAcquisitionSuccess(false);
+      setAcquisitionError(false);
+    }
 
     try {
       const response = await fetch(
@@ -141,10 +146,9 @@ export default function SentinelPanel({
       }
 
       const data = await response.json();
-      console.log('Acquisition successful:', data);
+
       setAcquisitionSuccess(true);
 
-      // Guardar acquisition_id para mostrar el panel NDVI
       if (data.acquisition_id) {
         setLastAcquisitionId(data.acquisition_id);
       }
@@ -154,8 +158,8 @@ export default function SentinelPanel({
         setErrorMessage('Esta fecha ya había sido adquirida anteriormente');
       }
 
-      // Refrescar fechas para actualizar badges
-      fetchAvailableDates();
+      // Refrescar fechas para actualizar badges (sin resetear estado de adquisición)
+      fetchAvailableDates(false);
     } catch (error) {
       console.error('Error acquiring bands:', error);
       setAcquisitionError(true);
@@ -243,7 +247,20 @@ export default function SentinelPanel({
 
           {/* Selector de fechas disponibles */}
           <div className="space-y-3">
-            <h3 className="font-semibold text-gray-800">Fechas disponibles</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-800">Fechas disponibles</h3>
+              {/* Leyenda de badges */}
+              <div className="flex gap-1 text-xs">
+                <span className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-green-600 rounded-full"></div>
+                  <span className="text-gray-600 hidden sm:inline">NDVI</span>
+                </span>
+                <span className="flex items-center gap-1 ml-2">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  <span className="text-gray-600 hidden sm:inline">Adq.</span>
+                </span>
+              </div>
+            </div>
             <DateSelector
               dates={dates}
               selectedDate={selectedDate}

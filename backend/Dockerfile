@@ -1,13 +1,16 @@
-FROM python:3.10-slim-bookworm
+FROM ghcr.io/osgeo/gdal:ubuntu-small-3.8.4
 
 WORKDIR /app
 
-# Añadir capa de dependencias por separado y evitar problemas de red en apt-get
+# Instalar Python 3.10 y dependencias esenciales
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 python3.10-dev python3-pip \
     build-essential libpq-dev wget curl \
-    gdal-bin libgdal-dev python3-gdal \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Crear symlink para python
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python
 
 # Copiar requisitos y actualizarlos por separado
 COPY requirements.txt requirements.txt

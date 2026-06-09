@@ -310,6 +310,8 @@ class NDVIService:
             HTTPException 403: Si no tiene acceso
             HTTPException 404: Si no existe NDVI
         """
+        from app.crud.acquisition import get_acquisition_by_id
+
         ndvi_result = await crud_ndvi.get_ndvi_by_acquisition(db, acquisition_id)
         if not ndvi_result:
             raise HTTPException(status_code=404, detail="NDVI not calculated yet")
@@ -319,7 +321,13 @@ class NDVIService:
         if not polygon or polygon.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        return self._format_response(ndvi_result)
+        # Obtener acquisition_date de la adquisición
+        acquisition = await get_acquisition_by_id(db, acquisition_id)
+        acquisition_date = acquisition.acquisition_date if acquisition else "unknown"
+
+        response = self._format_response(ndvi_result)
+        response["acquisition_date"] = acquisition_date
+        return response
 
     async def get_ndvi_tiff(
         self,

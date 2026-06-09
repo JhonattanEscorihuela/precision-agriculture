@@ -23,6 +23,7 @@ class NDVIStatsResponse(BaseModel):
     """Response con estadísticos NDVI (sin raster binario)."""
     acquisition_id: int
     polygon_id: int
+    acquisition_date: str = Field(..., description="Fecha de adquisición de la imagen satelital (YYYY-MM-DD)")
     calculation_date: str = Field(..., description="Fecha y hora del cálculo (ISO 8601)")
     ndvi_mean: float = Field(..., ge=-1, le=1, description="Promedio NDVI")
     ndvi_min: float = Field(..., ge=-1, le=1, description="Mínimo NDVI")

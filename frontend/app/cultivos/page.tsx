@@ -1,10 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { usePolygons } from '../context/PolygonContext';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
+import { calculatePolygonArea, formatArea } from '@/app/utils/geoUtils';
+import { usePolygonHealth } from '@/app/hooks/usePolygonHealth';
 
 export default function CultivosPage() {
+    const router = useRouter();
     const { polygons, deletePolygon, updatePolygon, fetchPolygons } = usePolygons();
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editName, setEditName] = useState('');
@@ -13,6 +17,10 @@ export default function CultivosPage() {
     useEffect(() => {
         fetchPolygons();
     }, [fetchPolygons]);
+
+    // Obtener estado de salud real basado en NDVI
+    const polygonIds = polygons.map(p => p.id);
+    const { health, isLoading: isLoadingHealth } = usePolygonHealth(polygonIds);
 
     const handleEdit = (id: number, currentName: string) => {
         setEditingId(id);
@@ -32,33 +40,43 @@ export default function CultivosPage() {
         }
     };
 
-    // Simular estado de salud (aquí podrías integrarlo con datos reales)
-    const getHealthStatus = () => {
-        const statuses = ['healthy', 'alert', 'critical'];
-        return statuses[Math.floor(Math.random() * statuses.length)];
+    const handleViewDashboard = (id: number) => {
+        router.push(`/cultivos/${id}`);
     };
 
+    // Configuración visual por estado de salud
     const healthConfig = {
         healthy: {
             borderColor: 'border-vegetation-healthy/30',
             bgColor: 'bg-gradient-to-br from-vegetation-healthy to-vegetation-vibrant',
             icon: '✓',
-            label: 'Óptimo',
-            textColor: 'text-vegetation-healthy'
+            label: 'Saludable',
+            textColor: 'text-vegetation-healthy',
+            description: 'NDVI ≥ 0.5'
         },
         alert: {
             borderColor: 'border-vegetation-alert/30',
             bgColor: 'bg-gradient-to-br from-vegetation-alert to-yellow-400',
             icon: '⚠',
-            label: 'Revisar',
-            textColor: 'text-vegetation-alert'
+            label: 'Moderado',
+            textColor: 'text-vegetation-alert',
+            description: 'NDVI 0.3-0.5'
         },
         critical: {
             borderColor: 'border-vegetation-critical/30',
             bgColor: 'bg-gradient-to-br from-vegetation-critical to-red-500',
             icon: '!',
             label: 'Crítico',
-            textColor: 'text-vegetation-critical'
+            textColor: 'text-vegetation-critical',
+            description: 'NDVI < 0.3'
+        },
+        unknown: {
+            borderColor: 'border-gray-300',
+            bgColor: 'bg-gradient-to-br from-gray-400 to-gray-500',
+            icon: '?',
+            label: 'Sin datos',
+            textColor: 'text-gray-600',
+            description: 'Sin NDVI'
         }
     };
 
@@ -81,9 +99,12 @@ export default function CultivosPage() {
                     </div>
                     <div className="flex-1 sm:flex-initial flex flex-col items-center px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-br from-vegetation-healthy to-vegetation-vibrant rounded-lg lg:rounded-xl shadow-md min-w-[100px] sm:min-w-[120px]">
                         <span className="font-mono text-white text-xl sm:text-2xl font-bold">
-                            {polygons.reduce((sum, p) => sum + (p.area || 0), 0).toFixed(1)}
+                            {polygons.reduce((sum, p) => {
+                                const areaHa = calculatePolygonArea(p.coordinates);
+                                return sum + areaHa;
+                            }, 0).toFixed(2)}
                         </span>
-                        <span className="text-white/90 text-[10px] sm:text-xs mt-1">Área Total (m²)</span>
+                        <span className="text-white/90 text-[10px] sm:text-xs mt-1">Área Total (ha)</span>
                     </div>
                 </div>
             </div>
@@ -92,8 +113,10 @@ export default function CultivosPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
                 {polygons.length > 0 ? (
                     polygons.map((polygon, index) => {
-                        const health = getHealthStatus();
-                        const config = healthConfig[health as keyof typeof healthConfig];
+                        // Obtener estado de salud real basado en NDVI
+                        const polygonHealth = health[polygon.id] || { status: 'unknown', ndvi: null, lastUpdate: null };
+                        const config = healthConfig[polygonHealth.status];
+                        const areaHa = calculatePolygonArea(polygon.coordinates);
 
                         return (
                             <div
@@ -155,7 +178,7 @@ export default function CultivosPage() {
                                                 <div className="flex items-center gap-2 text-xs lg:text-sm text-slate-700">
                                                     <span className="text-base lg:text-lg">📐</span>
                                                     <span className="font-mono font-medium">
-                                                        {polygon.area?.toFixed(2) || '0.00'} m²
+                                                        {formatArea(areaHa)}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-2 text-xs lg:text-sm text-slate-700">
@@ -164,6 +187,22 @@ export default function CultivosPage() {
                                                         {config.label}
                                                     </span>
                                                 </div>
+                                                {polygonHealth.ndvi !== null && (
+                                                    <div className="flex items-center gap-2 text-xs lg:text-sm text-slate-700">
+                                                        <span className="text-base lg:text-lg">📊</span>
+                                                        <span className="font-mono font-medium">
+                                                            NDVI: {polygonHealth.ndvi.toFixed(3)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {polygonHealth.lastUpdate && (
+                                                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                        <span className="text-sm">🕒</span>
+                                                        <span>
+                                                            {new Date(polygonHealth.lastUpdate).toLocaleDateString('es-ES')}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </>
                                     )}
@@ -172,6 +211,14 @@ export default function CultivosPage() {
                                 {/* Acciones */}
                                 {editingId !== polygon.id && (
                                     <div className="flex gap-2 justify-end pt-3 lg:pt-4 border-t border-satellite-blue/10">
+                                        <button
+                                            onClick={() => handleViewDashboard(polygon.id)}
+                                            className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-semibold text-sm transition-all hover:shadow-lg hover:-translate-y-0.5 flex items-center justify-center gap-1"
+                                            title="Ver dashboard de análisis"
+                                        >
+                                            <span className="text-base">📊</span>
+                                            <span className="hidden sm:inline">Dashboard</span>
+                                        </button>
                                         <button
                                             onClick={() => handleEdit(polygon.id, polygon.name)}
                                             className="w-9 h-9 lg:w-10 lg:h-10 rounded-lg bg-vegetation-alert/10 text-vegetation-alert flex items-center justify-center text-lg lg:text-xl transition-all hover:bg-vegetation-alert/20 hover:shadow-lg hover:-translate-y-0.5"

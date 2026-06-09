@@ -461,12 +461,24 @@ async def get_available_dates(
         acquisitions = await get_acquisitions_by_polygon(db, polygon_id)
         acquired_dates = {acq.acquisition_date for acq in acquisitions}
 
-        # Marcar fechas adquiridas
+        # Mapear acquisition_id por fecha para consultar NDVIs
+        acquisition_id_by_date = {acq.acquisition_date: acq.id for acq in acquisitions}
+
+        # Obtener NDVIs ya calculados
+        from app.crud.ndvi import get_ndvi_by_acquisition
+        ndvi_calculated_dates = set()
+        for acq_date, acq_id in acquisition_id_by_date.items():
+            ndvi_result = await get_ndvi_by_acquisition(db, acq_id)
+            if ndvi_result:
+                ndvi_calculated_dates.add(acq_date)
+
+        # Marcar fechas adquiridas y con NDVI calculado
         date_infos = []
         for d in dates:
             date_infos.append(DateInfo(
                 **d,
-                acquired=(d["date"] in acquired_dates)
+                acquired=(d["date"] in acquired_dates),
+                ndvi_calculated=(d["date"] in ndvi_calculated_dates)
             ))
 
         return AvailableDatesResponse(

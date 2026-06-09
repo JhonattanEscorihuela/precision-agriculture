@@ -10,23 +10,19 @@ interface NDVIBadgeProps {
 }
 
 /**
- * Badge que muestra valor NDVI con color según rango de vegetación.
+ * Badge que muestra valor NDVI con color según estado de salud del cultivo.
  *
- * Escala de colores:
- * [-1.0, 0.0)  → Marrón #8B4513 (sin vegetación: agua, suelo)
- * [0.0,  0.2)  → Beige #D2B48C (vegetación escasa: estrés)
- * [0.2,  0.4)  → Verde-amarillo #ADFF2F (vegetación baja: pastos secos)
- * [0.4,  0.6)  → Verde lima #32CD32 (vegetación media: cultivos sanos)
- * [0.6,  1.0]  → Verde oscuro #006400 (vegetación densa: óptima)
+ * Clasificación unificada (igual que usePolygonHealth):
+ * < 0.3  → Rojo crítico (vegetación escasa/estrés severo)
+ * 0.3-0.5 → Amarillo alert (vegetación moderada/revisar)
+ * ≥ 0.5  → Verde saludable (vegetación óptima)
  */
 export default function NDVIBadge({ value, size = 'md', showLabel = true }: NDVIBadgeProps) {
-  // Determinar color según rango NDVI
+  // Determinar color según estado de salud (UNIFICADO con usePolygonHealth)
   const getColor = (ndvi: number): string => {
-    if (ndvi < 0) return 'bg-[#8B4513] text-white'; // Marrón (sin vegetación)
-    if (ndvi < 0.2) return 'bg-[#D2B48C] text-gray-800'; // Beige (escasa)
-    if (ndvi < 0.4) return 'bg-[#ADFF2F] text-gray-900'; // Verde-amarillo (baja)
-    if (ndvi < 0.6) return 'bg-[#32CD32] text-white'; // Verde lima (media)
-    return 'bg-[#006400] text-white'; // Verde oscuro (densa)
+    if (ndvi < 0.3) return 'bg-vegetation-critical text-white'; // Rojo crítico
+    if (ndvi < 0.5) return 'bg-vegetation-alert text-white'; // Amarillo alert
+    return 'bg-vegetation-healthy text-white'; // Verde saludable
   };
 
   // Tamaños

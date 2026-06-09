@@ -86,7 +86,12 @@ async def calculate_ndvi(
         acquisition_id=result["acquisition_id"],
         polygon_id=result["polygon_id"],
         calculation_date=result["calculation_date"],
-        stats=NDVIStatsResponse(**result["stats"], calculation_date=result["calculation_date"]),
+        stats=NDVIStatsResponse(
+            acquisition_id=result["acquisition_id"],
+            polygon_id=result["polygon_id"],
+            calculation_date=result["calculation_date"],
+            **result["stats"]
+        ),
         message="NDVI calculado exitosamente"
     )
 
@@ -101,24 +106,28 @@ async def calculate_ndvi(
 )
 async def get_ndvi_by_polygon(
     polygon_id: int,
-    limit: int = 10,
+    start_date: str = None,
+    end_date: str = None,
+    limit: int = 100,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Lista todos los NDVI calculados para un polígono.
+    Lista todos los NDVI calculados para un polígono, opcionalmente filtrados por rango de fechas.
 
-    Útil para el frontend: verificar si ya existe NDVI antes de mostrar botón calcular.
-    Retorna lista ordenada por fecha de cálculo (más reciente primero).
+    Útil para el frontend dashboard: obtener NDVIs en período específico según filtro CloudWatch.
+    Retorna lista ordenada por fecha de adquisición (cronológico).
 
     Args:
         polygon_id: ID del polígono
-        limit: Número máximo de resultados (default 10)
+        start_date: Fecha inicio filtro (YYYY-MM-DD) - opcional
+        end_date: Fecha fin filtro (YYYY-MM-DD) - opcional
+        limit: Número máximo de resultados (default 100, suficiente para 2 años)
         db: Sesión de base de datos
         current_user: Usuario autenticado (JWT)
 
     Returns:
-        Lista de NDVIStatsResponse
+        Lista de NDVIStatsResponse en rango especificado
 
     Raises:
         HTTPException 403: Si no tiene acceso al polígono
@@ -131,14 +140,21 @@ async def get_ndvi_by_polygon(
             detail="You don't have permission to access this polygon"
         )
 
-    # Obtener NDVIs del polígono
-    ndvi_list = await crud_ndvi.get_ndvi_by_polygon(db, polygon_id, limit)
+    # Obtener NDVIs del polígono (ahora retorna tuplas con acquisition_date)
+    ndvi_tuples = await crud_ndvi.get_ndvi_by_polygon(
+        db,
+        polygon_id,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit
+    )
 
     # Formatear respuestas
     return [
         NDVIStatsResponse(
             acquisition_id=ndvi.acquisition_id,
             polygon_id=ndvi.polygon_id,
+            acquisition_date=acq_date,  # Fecha de la imagen satelital
             calculation_date=ndvi.calculation_date.isoformat(),
             ndvi_mean=ndvi.ndvi_mean,
             ndvi_min=ndvi.ndvi_min,
@@ -147,7 +163,7 @@ async def get_ndvi_by_polygon(
             width=ndvi.width,
             height=ndvi.height
         )
-        for ndvi in ndvi_list
+        for ndvi, acq_date in ndvi_tuples
     ]
 
 
@@ -193,6 +209,7 @@ async def get_ndvi_stats(
     return NDVIStatsResponse(
         acquisition_id=result["acquisition_id"],
         polygon_id=result["polygon_id"],
+        acquisition_date=result["acquisition_date"],
         calculation_date=result["calculation_date"],
         **result["stats"]
     )

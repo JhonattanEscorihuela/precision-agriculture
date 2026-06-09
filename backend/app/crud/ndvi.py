@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from typing import List, Optional
 from datetime import datetime
+import logging
 
 from app.models.analysis import NDVIResult, NDVIResultCreate
+
+logger = logging.getLogger(__name__)
 
 
 async def save_ndvi_result(
@@ -58,8 +61,7 @@ async def save_ndvi_result(
         return db_ndvi
     except Exception as e:
         await db.rollback()
-        import logging
-        logging.error(f"❌ Error saving NDVI result: {str(e)}")
+        logger.error(f"❌ Error saving NDVI result: {str(e)}")
         logging.error(f"   acquisition_id={acquisition_id}, polygon_id={polygon_id}")
         raise
 
@@ -83,41 +85,55 @@ async def get_ndvi_by_acquisition(
         result = await db.execute(query)
         return result.scalar_one_or_none()
     except Exception as e:
-        import logging
-        logging.error(f"❌ Error getting NDVI by acquisition: {str(e)}")
+        logger.error(f"❌ Error getting NDVI by acquisition: {str(e)}")
         raise
 
 
 async def get_ndvi_by_polygon(
     db: AsyncSession,
     polygon_id: int,
-    limit: int = 10
-) -> List[NDVIResult]:
+    start_date: str = None,
+    end_date: str = None,
+    limit: int = 100
+) -> List[tuple]:
     """
-    Lista todos los resultados NDVI de un polígono.
+    Lista todos los resultados NDVI de un polígono con JOIN a SentinelAcquisition,
+    opcionalmente filtrados por rango de fechas.
 
-    Útil para el frontend: mostrar histórico de análisis NDVI de una parcela.
+    Útil para el frontend dashboard: obtener histórico de análisis NDVI
+    en período específico según filtro CloudWatch.
 
     Args:
         db: Sesión async de base de datos
         polygon_id: ID del polígono
-        limit: Número máximo de resultados (default 10)
+        start_date: Fecha inicio filtro (YYYY-MM-DD) - opcional
+        end_date: Fecha fin filtro (YYYY-MM-DD) - opcional
+        limit: Número máximo de resultados (default 100, suficiente para 2 años)
 
     Returns:
-        Lista de NDVIResult ordenados por fecha de cálculo (más reciente primero)
+        Lista de tuplas (NDVIResult, acquisition_date) ordenados por fecha de adquisición (cronológico)
     """
+    from app.models.acquisition import SentinelAcquisition
+
     try:
         query = (
-            select(NDVIResult)
+            select(NDVIResult, SentinelAcquisition.acquisition_date)
+            .join(SentinelAcquisition, NDVIResult.acquisition_id == SentinelAcquisition.id)
             .where(NDVIResult.polygon_id == polygon_id)
-            .order_by(NDVIResult.calculation_date.desc())
-            .limit(limit)
         )
+
+        # Aplicar filtros de fecha si se proporcionan
+        if start_date:
+            query = query.where(SentinelAcquisition.acquisition_date >= start_date)
+        if end_date:
+            query = query.where(SentinelAcquisition.acquisition_date <= end_date)
+
+        query = query.order_by(SentinelAcquisition.acquisition_date.desc()).limit(limit)
+
         result = await db.execute(query)
-        return result.scalars().all()
+        return result.all()
     except Exception as e:
-        import logging
-        logging.error(f"❌ Error getting NDVI by polygon: {str(e)}")
+        logger.error(f"❌ Error getting NDVI by polygon: {str(e)}")
         raise
 
 
@@ -142,8 +158,7 @@ async def delete_ndvi_result(
         return result.rowcount > 0
     except Exception as e:
         await db.rollback()
-        import logging
-        logging.error(f"❌ Error deleting NDVI result: {str(e)}")
+        logger.error(f"❌ Error deleting NDVI result: {str(e)}")
         raise
 
 
@@ -166,6 +181,5 @@ async def get_ndvi_by_id(
         result = await db.execute(query)
         return result.scalar_one_or_none()
     except Exception as e:
-        import logging
-        logging.error(f"❌ Error getting NDVI by ID: {str(e)}")
+        logger.error(f"❌ Error getting NDVI by ID: {str(e)}")
         raise
