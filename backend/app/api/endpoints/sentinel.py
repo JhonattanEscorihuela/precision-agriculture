@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from io import BytesIO
 
 from app.database import get_session
-from app.services.sentinel_service import SentinelService
+from app.services.sentinel import SentinelService
 from app.schemas.sentinel import (
     NDVIDownloadRequest,
     BandsDownloadRequest,
