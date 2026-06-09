@@ -1522,3 +1522,341 @@ const fetch = useCallback(async () => {
   - DESPUÉS: `}, [polygonId, range]);`
 
 **Estado final:** ✅ Loop eliminado, dashboard funcional, sin re-renders innecesarios
+
+---
+
+# Lecciones Aprendidas - Refactorización Modular de sentinel_service (2026-06-09)
+
+## 🎯 Feature: Refactorización arquitectónica aplicando principios atoms/molecules/organisms
+
+### Objetivo
+Refactorizar `sentinel_service.py` (952 líneas) siguiendo principios de **Single Responsibility Principle** y arquitectura modular tipo atoms/molecules/organisms del frontend.
+
+### 📊 Métricas de la refactorización
+
+**ANTES:**
+```
+backend/app/services/
+└── sentinel_service.py  (952 líneas, 7 responsabilidades)
+```
+
+**DESPUÉS:**
+```
+backend/app/services/sentinel/
+├── __init__.py                    (10 líneas) - Export público
+├── sentinel_service.py            (335 líneas) - Orquestador
+├── auth.py                        (72 líneas) - OAuth2
+├── stac_client.py                 (126 líneas) - STAC API
+├── process_client.py              (294 líneas) - Process API
+├── geometry.py                    (98 líneas) - Cálculos geométricos
+├── request_builder.py             (173 líneas) - Payloads
+└── logger_utils.py                (130 líneas) - Logging
+Total: 1238 líneas (+30% por modularidad)
+```
+
+**Reducción por módulo:**
+- Archivo más grande: 952 líneas → 335 líneas (-65%)
+- Cada módulo < 350 líneas (máximo recomendado)
+- Responsabilidades claras (1 por módulo)
+
+---
+
+## ✅ Beneficios obtenidos
+
+### 1. **Single Responsibility Principle (SRP)**
+Cada módulo tiene una responsabilidad única y bien definida:
+- `auth.py` → Solo autenticación OAuth2
+- `stac_client.py` → Solo búsqueda de metadatos
+- `process_client.py` → Solo descargas de imágenes
+- `geometry.py` → Solo cálculos geométricos
+- `request_builder.py` → Solo construcción de payloads
+- `logger_utils.py` → Solo logging detallado
+- `sentinel_service.py` → Solo orquestación
+
+### 2. **Testeabilidad mejorada**
+```python
+# ANTES: Difícil testear componentes individuales
+service = SentinelService()  # 952 líneas cargadas
+service.authenticate()  # Testear solo auth requiere instanciar todo
+
+# DESPUÉS: Tests unitarios independientes
+from app.services.sentinel.auth import SentinelAuth
+auth = SentinelAuth()
+token = auth.authenticate()
+assert token is not None
+
+# Tests con mocks
+auth_mock = Mock(spec=SentinelAuth)
+auth_mock.ensure_authenticated.return_value = "fake_token"
+process_client = ProcessClient(auth_mock)
+```
+
+### 3. **Reutilización para OE3 y OE4**
+Módulos reutilizables en objetivos futuros:
+- `geometry.py`:
+  - OE3 (Segmentación): `calculate_bbox()` para crops
+  - OE4 (Textura): `calculate_optimal_dimensions()` para ventanas
+- `request_builder.py`:
+  - Fácil agregar nuevos evalscripts (EVI, SAVI, LAI)
+- `logger_utils.py`:
+  - Debugging detallado para Process API
+
+### 4. **Mantenibilidad**
+- Navegación más fácil (< 350 líneas por archivo)
+- Búsqueda más rápida (archivos especializados)
+- Cambios aislados (modificar auth no toca logging)
+- Código más limpio (menos scrolling)
+
+### 5. **Sin breaking changes**
+```python
+# API pública NO cambió - backward compatible:
+from app.services.sentinel import SentinelService
+service = SentinelService()
+dates = await service.get_available_dates(...)
+bands = await service.download_bands(...)
+```
+
+Solo cambiaron imports en 2 archivos:
+- `backend/app/api/endpoints/sentinel.py`
+- `backend/app/api/endpoints/ndvi_batch.py`
+
+---
+
+## 🏗️ Patrón de arquitectura aplicado
+
+### Inspiración: Frontend atoms/molecules/organisms
+
+**Frontend:**
+```
+components/
+├── atoms/       ← Elementos básicos (< 50 líneas)
+├── molecules/   ← Combinación atoms (< 100 líneas)
+└── organisms/   ← Componentes complejos (< 200 líneas)
+```
+
+**Backend (aplicado):**
+```
+services/sentinel/
+├── auth.py              ← "Atom" - OAuth2 básico
+├── geometry.py          ← "Atom" - Funciones puras
+├── request_builder.py   ← "Molecule" - Construye payloads
+├── logger_utils.py      ← "Molecule" - Usa geometry
+├── stac_client.py       ← "Molecule" - Cliente simple
+├── process_client.py    ← "Organism" - Usa auth + builder + logger
+└── sentinel_service.py  ← "Organism" - Orquesta todo
+```
+
+---
+
+## 📋 Checklist de refactorización para futuros servicios
+
+**Cuándo refactorizar un servicio:**
+- [ ] Archivo > 500 líneas
+- [ ] Más de 3 responsabilidades diferentes
+- [ ] Difícil testear componentes individuales
+- [ ] Navegación requiere mucho scrolling
+- [ ] Duplicación de código entre métodos
+
+**Cómo refactorizar (pasos):**
+1. [ ] Crear checkpoint con git (branch feature + commit)
+2. [ ] Identificar responsabilidades (listar métodos por tema)
+3. [ ] Crear package con `__init__.py`
+4. [ ] Extraer módulos por responsabilidad (empezar por más simples)
+5. [ ] Crear orquestador que usa los módulos
+6. [ ] Actualizar imports (buscar con grep)
+7. [ ] Validar con docker-compose up --build
+8. [ ] Documentar en tasks/REFACTOR_*.md
+9. [ ] Merge a main y eliminar backup
+
+**Estructura recomendada:**
+```
+services/{feature}/
+├── __init__.py              # Export público
+├── {feature}_service.py     # Orquestador principal
+├── auth.py                  # Si requiere autenticación
+├── client.py / api_client.py # Cliente API externa
+├── processor.py             # Lógica de procesamiento
+├── builder.py               # Construcción de payloads
+└── utils.py                 # Utilidades compartidas
+```
+
+---
+
+## 🎓 Lecciones clave
+
+### 1. **Modularización aumenta líneas totales (está bien)**
+- 952 líneas → 1238 líneas (+30%)
+- Por qué: Imports por módulo, docstrings mejorados, separación clara
+- **Vale la pena:** Mejor mantenibilidad >> menor líneas totales
+
+### 2. **Inyección de dependencias facilita testing**
+```python
+# ProcessClient recibe SentinelAuth en __init__
+class ProcessClient:
+    def __init__(self, auth: SentinelAuth):
+        self.auth = auth
+    
+    async def download_bands(...):
+        token = self.auth.ensure_authenticated()
+        # Fácil mockear 'auth' en tests
+```
+
+### 3. **Funciones puras en módulo separado (geometry.py)**
+Funciones sin dependencias externas → más reutilizables:
+```python
+# geometry.py - Sin imports de app/, solo typing
+def calculate_bbox(coords: List[List[float]]) -> Dict:
+    # Función pura, fácil testear
+    lngs = [c[0] for c in coords]
+    lats = [c[1] for c in coords]
+    return {...}
+```
+
+### 4. **Mantener API pública estable**
+```python
+# __init__.py - Interface pública
+from .sentinel_service import SentinelService
+__all__ = ["SentinelService"]
+
+# Clientes usan:
+from app.services.sentinel import SentinelService
+# No necesitan saber estructura interna
+```
+
+### 5. **Documentar razón de refactorización**
+Crear `tasks/REFACTOR_*.md` con:
+- Motivación (por qué refactorizar)
+- Estructura antes/después
+- Beneficios concretos
+- Breaking changes (si hay)
+- Validación realizada
+
+---
+
+## ⚠️ Errores evitados
+
+### 1. **No crear módulos muy pequeños**
+❌ MAL: 10 archivos de 50 líneas cada uno (over-engineering)
+✅ BIEN: 7 módulos de 70-335 líneas (balance)
+
+### 2. **No romper API pública**
+❌ MAL: Cambiar signatures de métodos públicos
+✅ BIEN: Mantener misma interfaz, cambiar solo implementación
+
+### 3. **No olvidar __init__.py**
+❌ MAL: Package sin __init__.py → import error
+✅ BIEN: `__init__.py` con exports explícitos
+
+### 4. **No asumir imports funcionan**
+❌ MAL: Commit sin probar
+✅ BIEN: docker-compose up --build para validar
+
+---
+
+## 🚀 Aplicación en OE3 y OE4
+
+### OE3 - Segmentación espacial
+**Reutilización de código:**
+```python
+# geometry.py útil para:
+from app.services.sentinel.geometry import calculate_bbox
+
+# Calcular bbox de segmento
+segment_bbox = calculate_bbox(segment_coords)
+```
+
+### OE4 - Descriptores de textura
+**Siguiendo el patrón:**
+```
+services/texture/
+├── __init__.py
+├── texture_service.py       # Orquestador
+├── feature_extractor.py     # GLCM, LBP, etc.
+├── unet_predictor.py        # Predicción con U-Net
+└── utils.py                 # Ventanas, normalización
+```
+
+### OE5 - Integración
+**Ventajas:**
+- Módulos pequeños más fáciles de documentar
+- API clara para frontend team
+- Tests independientes por módulo
+
+---
+
+## 📊 Validación realizada
+
+### 1. Tests de importación
+```bash
+# Dentro de Docker (tiene dependencies)
+docker exec -it precision-agriculture-backend python3 -c \
+  "from app.services.sentinel import SentinelService; print('✅ OK')"
+# Output: ✅ OK
+```
+
+### 2. Docker Compose
+```bash
+docker-compose down
+docker-compose up --build -d
+docker-compose ps
+# All services UP ✅
+```
+
+### 3. Logs del backend
+```
+app.services.sentinel.stac_client - INFO - 🔍 Consultando STAC API...
+# Nuevos módulos funcionando ✅
+```
+
+### 4. API health check
+```bash
+curl http://localhost:8000/
+# {"message":"Backend is running"} ✅
+
+curl http://localhost:8000/docs
+# Swagger UI accessible ✅
+```
+
+### 5. Prueba manual end-to-end
+- ✅ Login frontend
+- ✅ Seleccionar parcela
+- ✅ Consultar fechas disponibles (usa stac_client.py)
+- ✅ Adquirir bandas (usa process_client.py)
+- ✅ Calcular NDVI batch (usa sentinel_service.py)
+- ✅ Logs detallados (usa logger_utils.py)
+
+---
+
+## 🎯 Conclusión
+
+**Refactorización exitosa:**
+- ✅ 7 módulos cohesivos y desacoplados
+- ✅ 0 breaking changes en API pública
+- ✅ Mejor testeabilidad
+- ✅ Código reutilizable para OE3/OE4
+- ✅ Mantenibilidad mejorada
+- ✅ Docker validado
+- ✅ Documentación completa
+
+**Tiempo invertido:** ~2 horas
+**Valor agregado:** Alto (escalabilidad para 3 OEs futuros)
+
+**Estado:** MERGED to main ✅
+
+---
+
+## 📚 Para próxima sesión
+
+**Considerar refactorizar si:**
+- `ndvi_service.py` crece > 500 líneas
+- Se agregan múltiples índices espectrales (EVI, SAVI, LAI)
+- OE3 o OE4 generan servicios > 500 líneas
+
+**Patrón recomendado:**
+```
+services/{feature}/
+├── {feature}_service.py  ← Orquestador
+├── processor.py          ← Lógica core
+├── client.py             ← APIs externas
+└── utils.py              ← Helpers
+```
