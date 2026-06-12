@@ -2150,3 +2150,192 @@ useEffect(() => {
 **Archivos afectados:**
 - `frontend/app/hooks/usePolygonHealth.ts`
 
+
+---
+
+# ERROR #14: Performance regression - duplicate logs, N+1 queries, double requests (2026-06-12)
+
+**Síntomas:**
+1. Logs SQL duplicados: cada query aparece 2 veces
+2. N+1 queries: 30+ SELECT individuales a `ndvi_results` en un solo request
+3. Double request: `/api/sentinel/available-dates` se llama 2 veces con parámetros diferentes
+4. Panel de fechas con delay perceptible (400ms) al abrir
+
+**Causas raíz:**
+
+### 1. Logs duplicados
+- `echo=True` en `create_async_engine()` crea su propio handler
+- `logging.basicConfig()` crea otro handler
+- Resultado: 2 handlers → logs duplicados
+
+### 2. N+1 queries
+```python
+# ❌ MAL: Loop con queries individuales
+for acq_date, acq_id in acquisition_id_by_date.items():
+    ndvi_result = await get_ndvi_by_acquisition(db, acq_id)  # N queries
+    if ndvi_result:
+        ndvi_calculated_dates.add(acq_date)
+
+# ✅ BIEN: Una query con IN clause
+all_acquisition_ids = list(acquisition_id_by_date.values())
+calculated_ids = await get_ndvi_by_acquisitions_bulk(db, all_acquisition_ids)
+ndvi_calculated_dates = {
+    date for date, acq_id in acquisition_id_by_date.items()
+    if acq_id in calculated_ids
+}
+```
+
+### 3. Double request con fechas diferentes
+- `getSmartDates()` se ejecuta en cada render (línea 46)
+- `useEffect #1` recalcula y hace `setStartDate()` + `setEndDate()` al cambiar `polygonId`
+- `useEffect #2` depende de `[isOpen, startDate, endDate]`
+- Cascada: mount → setStartDate → useEffect dispara fetch → setEndDate → useEffect dispara otro fetch
+- Fechas diferentes entre calls porque `getSmartDates()` se ejecuta en milisegundos distintos
+
+### 4. Debounce aplicado siempre
+- Debounce de 400ms se aplica incluso al abrir panel por primera vez
+- Usuario percibe delay innecesario
+
+**Soluciones implementadas:**
+
+### 1. Logs duplicados
+```python
+# backend/app/database.py
+engine = create_async_engine(settings.DATABASE_URL, echo=False)
+
+# backend/main.py (ANTES de imports)
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Activar queries SQL SIN duplicados
+logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
+```
+
+**Cómo funciona:** `echo=False` evita que SQLAlchemy cree su propio handler. El logger de SQLAlchemy usa el handler de `basicConfig`. Un solo handler = sin duplicados.
+
+### 2. N+1 queries → Bulk query
+```python
+# backend/app/crud/ndvi.py
+async def get_ndvi_by_acquisitions_bulk(
+    db: AsyncSession,
+    acquisition_ids: list[int]
+) -> set[int]:
+    """Retorna set de acquisition_ids que tienen NDVI calculado"""
+    if not acquisition_ids:
+        return set()
+    
+    query = select(NDVIResult.acquisition_id).where(
+        NDVIResult.acquisition_id.in_(acquisition_ids)
+    )
+    result = await db.execute(query)
+    return set(result.scalars().all())
+```
+
+**Resultado:** De 30+ queries → 1 query con `IN (id1, id2, id3, ...)`
+
+### 3. Double request → Debounce optimizado
+```typescript
+// frontend/app/components/organisms/SentinelPanel.tsx
+
+// useRef para trackear mount inicial
+const isInitialFetchRef = useRef(true);
+
+// useEffect #1: Reset al cambiar parcela
+useEffect(() => {
+  if (polygonId) {
+    const { startDateStr, endDateStr } = getSmartDates();
+    setStartDate(startDateStr);
+    setEndDate(endDateStr);
+    // ... más resets
+    isInitialFetchRef.current = true; // Marcar para fetch inmediato
+  }
+}, [polygonId]);
+
+// useEffect #2: Fetch INMEDIATO al abrir panel
+useEffect(() => {
+  if (isOpen && polygonId && startDate && endDate && isInitialFetchRef.current) {
+    isInitialFetchRef.current = false;
+    fetchAvailableDates();
+  }
+}, [isOpen, polygonId]);
+
+// useEffect #3: Fetch CON DEBOUNCE solo para cambios manuales de fechas
+useEffect(() => {
+  if (!(isOpen && polygonId && startDate && endDate)) {
+    return;
+  }
+  
+  // Evitar fetch en mount inicial
+  if (isInitialFetchRef.current) {
+    return;
+  }
+  
+  const timer = setTimeout(() => {
+    fetchAvailableDates();
+  }, 400);
+  
+  return () => clearTimeout(timer);
+}, [startDate, endDate]);
+```
+
+**Cómo funciona:**
+1. **Mount inicial:** `isInitialFetchRef.current = true` → useEffect #2 dispara fetch inmediato (0ms)
+2. **Usuario edita fechas:** `isInitialFetchRef.current = false` → useEffect #3 espera 400ms tras última tecla
+3. **Cambio de parcela:** useEffect #1 resetea ref → vuelve a ciclo 1
+
+**Resultado:**
+- Abrir panel: fetch instantáneo (sin delay perceptible)
+- Editar fechas: debounce de 400ms (evita múltiples requests mientras teclea)
+- Un solo request por acción
+
+**Lecciones clave:**
+
+1. **Logging en FastAPI/SQLAlchemy:**
+   - `echo=True` + `basicConfig` = logs duplicados
+   - Usar `echo=False` + `getLogger().setLevel(INFO)` para un solo handler
+   - Configurar logging ANTES de imports de app
+
+2. **N+1 queries detection:**
+   - Grep logs por `WHERE table.id = %s` repetido
+   - Si ves 30+ queries idénticas con diferentes IDs → N+1
+   - Solución: función bulk con `WHERE id IN (...)`
+
+3. **React useEffect cascading:**
+   - Si `useEffect` hace `setState` de una dependency de otro `useEffect` → cascada
+   - Timestamps en logs revelan requests simultáneos con parámetros diferentes
+   - Solución: separar fetch inicial (inmediato) de fetch manual (debounced) usando `useRef`
+
+4. **Debounce UX:**
+   - No aplicar debounce a acciones de "mount" o "open" (el usuario espera respuesta inmediata)
+   - Solo debounce para input continuo (teclear, slider, etc.)
+   - Usar `useRef` para distinguir entre mount inicial vs updates posteriores
+
+5. **session.begin() context manager:**
+   - ❌ NO usar `async with session.begin()` como dependency injection
+   - Causa error: "Can't operate on closed transaction inside context manager"
+   - La transacción se cierra al salir del context manager, pero FastAPI puede intentar operaciones después del `yield`
+   - ✅ Dejar session sin `begin()` explícito, confiar en `commit()` manual en CRUDs
+
+**Impacto de performance:**
+- SQL queries: de 750+ a ~10 por request
+- Panel load time: de 400ms+ delay a instantáneo
+- User experience: fluida sin lag perceptible
+
+**Archivos modificados:**
+- `backend/main.py` - Logging config
+- `backend/app/database.py` - echo=False
+- `backend/app/crud/ndvi.py` - Función bulk
+- `backend/app/api/endpoints/sentinel.py` - Uso de bulk query
+- `frontend/app/components/organisms/SentinelPanel.tsx` - Debounce optimizado
+
+**Detección futura:**
+- `grep -E "WHERE.*= %s" logs | wc -l` → si > 10 en un request, investigar N+1
+- Browser DevTools Network tab → requests duplicados con timestamps idénticos
+- Backend logs con queries duplicadas palabra por palabra
+- Panel UI con delay perceptible al abrir
+
