@@ -25,6 +25,7 @@ class STACClient:
         """
         Consulta STAC API para obtener fechas con imágenes disponibles.
 
+        Implementa paginación para obtener TODAS las escenas disponibles.
         Filtra escenas Sentinel-2 L2A con cobertura de nubes ≤ max_cloud.
         STAC API no requiere autenticación.
 
@@ -60,7 +61,7 @@ class STACClient:
                 "type": "Polygon",
                 "coordinates": [polygon_coords]
             },
-            "limit": 100,
+            "limit": 100,  # Máximo eficiente por página
             "fields": {
                 "include": [
                     "properties.datetime",
@@ -72,7 +73,11 @@ class STACClient:
         }
 
         try:
+            all_features = []
+            page = 1
+
             async with httpx.AsyncClient(timeout=60.0) as client:
+                # Primera página
                 response = await client.post(
                     self.STAC_URL,
                     json=payload,
@@ -81,14 +86,64 @@ class STACClient:
                 response.raise_for_status()
                 data = response.json()
 
-            features = data.get("features", [])
-            logger.info(f"📦 STAC API retornó {len(features)} escenas totales")
+                features = data.get("features", [])
+                all_features.extend(features)
+                logger.info(f"📄 Página {page}: {len(features)} escenas")
+                print(f"📄 Página {page}: {len(features)} escenas")  # Debug print
+
+                # Verificar si hay más páginas (buscar link con rel="next")
+                links = data.get("links", [])
+                next_link = None
+                for link in links:
+                    if link.get("rel") == "next":
+                        next_link = link
+                        break
+
+                # Paginar si hay más resultados
+                while next_link:
+                    page += 1
+
+                    # El link next incluye method, href y body con token
+                    next_url = next_link.get("href")
+                    next_method = next_link.get("method", "POST")
+                    next_body = next_link.get("body", {})
+
+                    if next_method == "POST" and next_body:
+                        response = await client.post(
+                            next_url,
+                            json=next_body,
+                            headers={"Content-Type": "application/json"}
+                        )
+                    else:
+                        response = await client.get(
+                            next_url,
+                            headers={"Content-Type": "application/json"}
+                        )
+
+                    response.raise_for_status()
+                    data = response.json()
+
+                    features = data.get("features", [])
+                    all_features.extend(features)
+                    logger.info(f"📄 Página {page}: {len(features)} escenas")
+                    print(f"📄 Página {page}: {len(features)} escenas")  # Debug print
+
+                    # Buscar siguiente página
+                    links = data.get("links", [])
+                    next_link = None
+                    for link in links:
+                        if link.get("rel") == "next":
+                            next_link = link
+                            break
+
+            logger.info(f"📦 Total escenas obtenidas (todas las páginas): {len(all_features)}")
+            print(f"📦 Total escenas obtenidas (todas las páginas): {len(all_features)}")  # Debug print
 
             # Filtrar por cobertura de nubes y extraer información relevante
             # Agrupar por fecha y quedarnos con la escena de menor nubosidad
             dates_dict = {}
 
-            for feature in features:
+            for feature in all_features:
                 props = feature.get("properties", {})
                 cloud_cover = props.get("eo:cloud_cover", 100)
 
