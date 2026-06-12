@@ -89,6 +89,37 @@ async def get_ndvi_by_acquisition(
         raise
 
 
+async def get_ndvi_by_acquisitions_bulk(
+    db: AsyncSession,
+    acquisition_ids: list[int]
+) -> set[int]:
+    """
+    Obtiene los acquisition_ids que tienen NDVI calculado (bulk query).
+
+    Resuelve problema N+1: en lugar de hacer N queries individuales,
+    hace una sola query con IN clause.
+
+    Args:
+        db: Sesión async de base de datos
+        acquisition_ids: Lista de IDs de adquisiciones a verificar
+
+    Returns:
+        Set de acquisition_ids que tienen NDVI calculado
+    """
+    if not acquisition_ids:
+        return set()
+
+    try:
+        query = select(NDVIResult.acquisition_id).where(
+            NDVIResult.acquisition_id.in_(acquisition_ids)
+        )
+        result = await db.execute(query)
+        return set(result.scalars().all())
+    except Exception as e:
+        logger.error(f"❌ Error getting NDVI bulk: {str(e)}")
+        raise
+
+
 async def get_ndvi_by_polygon(
     db: AsyncSession,
     polygon_id: int,

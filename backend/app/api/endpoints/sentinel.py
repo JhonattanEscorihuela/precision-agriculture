@@ -466,13 +466,14 @@ async def get_available_dates(
         # Mapear acquisition_id por fecha para consultar NDVIs
         acquisition_id_by_date = {acq.acquisition_date: acq.id for acq in acquisitions}
 
-        # Obtener NDVIs ya calculados
-        from app.crud.ndvi import get_ndvi_by_acquisition
-        ndvi_calculated_dates = set()
-        for acq_date, acq_id in acquisition_id_by_date.items():
-            ndvi_result = await get_ndvi_by_acquisition(db, acq_id)
-            if ndvi_result:
-                ndvi_calculated_dates.add(acq_date)
+        # Obtener NDVIs ya calculados (bulk query - resuelve N+1)
+        from app.crud.ndvi import get_ndvi_by_acquisitions_bulk
+        all_acquisition_ids = list(acquisition_id_by_date.values())
+        calculated_ids = await get_ndvi_by_acquisitions_bulk(db, all_acquisition_ids)
+        ndvi_calculated_dates = {
+            date for date, acq_id in acquisition_id_by_date.items()
+            if acq_id in calculated_ids
+        }
 
         # Marcar fechas adquiridas y con NDVI calculado
         date_infos = []

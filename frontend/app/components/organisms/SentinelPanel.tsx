@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import DateSelector from '../molecules/DateSelector';
 import AcquireButton from '../molecules/AcquireButton';
 import NDVIPanel from './NDVIPanel';
@@ -56,6 +56,9 @@ export default function SentinelPanel({
   const [errorMessage, setErrorMessage] = useState('');
   const [lastAcquisitionId, setLastAcquisitionId] = useState<number | null>(null);
 
+  // Ref para evitar debounce en fetch inicial
+  const isInitialFetchRef = useRef(true);
+
   // Resetear completamente cuando cambia la parcela
   useEffect(() => {
     if (polygonId) {
@@ -69,25 +72,34 @@ export default function SentinelPanel({
       setAcquisitionSuccess(false);
       setAcquisitionError(false);
       setErrorMessage('');
+      isInitialFetchRef.current = true; // Marcar para fetch inmediato
     }
   }, [polygonId]);
 
-  // Cargar fechas cuando se abre el panel
+  // Fetch inmediato cuando se abre el panel o cambia polygonId
   useEffect(() => {
-    if (isOpen && polygonId && startDate && endDate) {
+    if (isOpen && polygonId && startDate && endDate && isInitialFetchRef.current) {
+      isInitialFetchRef.current = false;
       fetchAvailableDates();
     }
-  }, [isOpen]);
+  }, [isOpen, polygonId]);
 
-  // Consultar fechas disponibles cuando cambian las fechas (después de abrir)
+  // Fetch con debounce cuando el usuario cambia fechas manualmente
   useEffect(() => {
-    if (isOpen && polygonId && startDate && endDate && dates.length === 0 && !isLoadingDates) {
-      // Solo recargar si cambian las fechas manualmente (no en el mount inicial)
-      const { startDateStr, endDateStr } = getSmartDates();
-      if (startDate !== startDateStr || endDate !== endDateStr) {
-        fetchAvailableDates();
-      }
+    if (!(isOpen && polygonId && startDate && endDate)) {
+      return;
     }
+
+    // Evitar fetch en mount inicial (ya se hizo arriba)
+    if (isInitialFetchRef.current) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      fetchAvailableDates();
+    }, 400);
+
+    return () => clearTimeout(timer);
   }, [startDate, endDate]);
 
   const fetchAvailableDates = async (resetAcquisitionState = true) => {

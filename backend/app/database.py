@@ -5,7 +5,7 @@ from sqlmodel import SQLModel
 from app.core.config import settings
 
 # Motor de la base de datos
-engine = create_async_engine(settings.DATABASE_URL, echo=True)
+engine = create_async_engine(settings.DATABASE_URL, echo=False)
 
 # Crear una sesión para interactuar con la base de datos
 async_session = sessionmaker(

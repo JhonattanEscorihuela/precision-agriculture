@@ -1,21 +1,26 @@
+import logging
+
+# Configurar logger raíz
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Activar queries SQL SIN duplicados
+# (funciona porque echo=False, solo hay un handler)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
+
 from fastapi import FastAPI
 from app.api.endpoints import polygons, auth, sentinel, ndvi, ndvi_batch  # Importa los routers
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
-import logging
 
 # Importar modelos para que SQLModel los registre
 from app.models.user import User
 from app.models.polygon import Polygon
 from app.models.acquisition import SentinelAcquisition
 from app.models.analysis import NDVIResult  # OE2
-
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 
 app = FastAPI()
 
