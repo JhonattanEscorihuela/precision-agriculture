@@ -77,17 +77,17 @@ class NDVIService:
         """
         logger.info(f"🌿 Iniciando cálculo NDVI para acquisition_id={acquisition_id}")
 
-        # 1. Verificar si ya existe NDVI (idempotencia)
-        existing_ndvi = await crud_ndvi.get_ndvi_by_acquisition(db, acquisition_id)
-        if existing_ndvi:
-            logger.info(f"✅ NDVI ya existe (id={existing_ndvi.id}), retornando sin recalcular")
-            return self._format_response(existing_ndvi)
-
-        # 2. Obtener adquisición
+        # 1. Obtener adquisición primero (necesitamos acquisition_date)
         acquisition = await crud_acquisition.get_acquisition_by_id(db, acquisition_id)
         if not acquisition:
             logger.error(f"❌ Acquisition {acquisition_id} no encontrada")
             raise HTTPException(status_code=404, detail="Acquisition not found")
+
+        # 2. Verificar si ya existe NDVI (idempotencia)
+        existing_ndvi = await crud_ndvi.get_ndvi_by_acquisition(db, acquisition_id)
+        if existing_ndvi:
+            logger.info(f"✅ NDVI ya existe (id={existing_ndvi.id}), retornando sin recalcular")
+            return self._format_response(existing_ndvi, acquisition_date=acquisition.acquisition_date)
 
         # 3. Verificar ownership
         polygon = await crud_polygon.get_polygon_by_id(db, acquisition.polygon_id)
@@ -130,7 +130,7 @@ class NDVIService:
         )
 
         logger.info(f"✅ NDVI guardado exitosamente (id={ndvi_result.id})")
-        return self._format_response(ndvi_result)
+        return self._format_response(ndvi_result, acquisition_date=acquisition.acquisition_date)
 
     async def _read_and_calculate_ndvi(
         self,
@@ -282,26 +282,41 @@ class NDVIService:
 
         return buf.getvalue()
 
-    def _format_response(self, ndvi_result) -> Dict[str, Any]:
+    def _format_response(self, ndvi_result, acquisition_date: str = None) -> Dict[str, Any]:
         """
         Formatea el resultado NDVI para respuesta de API.
 
         Args:
             ndvi_result: Objeto NDVIResult de la BD
+            acquisition_date: Fecha de adquisición (YYYY-MM-DD o date object)
 
         Returns:
             Dict con datos formateados
         """
+        # Convertir acquisition_date a string si es date object
+        if acquisition_date and hasattr(acquisition_date, 'isoformat'):
+            acquisition_date_str = acquisition_date.isoformat()
+        elif acquisition_date:
+            acquisition_date_str = str(acquisition_date)
+        else:
+            acquisition_date_str = "unknown"
+
         return {
             "ndvi_id": ndvi_result.id,
             "acquisition_id": ndvi_result.acquisition_id,
             "polygon_id": ndvi_result.polygon_id,
             "calculation_date": ndvi_result.calculation_date.isoformat(),
+            "acquisition_date": acquisition_date_str,  # En raíz para el endpoint
             "stats": {
+                # Solo datos estadísticos NDVI, NO IDs ni fechas
+                # (el endpoint los pasa explícitamente)
                 "ndvi_mean": ndvi_result.ndvi_mean,
                 "ndvi_min": ndvi_result.ndvi_min,
                 "ndvi_max": ndvi_result.ndvi_max,
                 "ndvi_std": ndvi_result.ndvi_std,
+                "ndvi_median": ndvi_result.ndvi_median,
+                "ndvi_p10": ndvi_result.ndvi_p10,
+                "ndvi_p90": ndvi_result.ndvi_p90,
                 "width": ndvi_result.width,
                 "height": ndvi_result.height
             }
@@ -343,7 +358,7 @@ class NDVIService:
         acquisition = await get_acquisition_by_id(db, acquisition_id)
         acquisition_date = acquisition.acquisition_date if acquisition else "unknown"
 
-        response = self._format_response(ndvi_result)
+        response = self._format_response(ndvi_result, acquisition_date=acquisition_date)
         response["acquisition_date"] = acquisition_date
         return response
 

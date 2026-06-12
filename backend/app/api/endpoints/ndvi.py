@@ -89,6 +89,7 @@ async def calculate_ndvi(
         stats=NDVIStatsResponse(
             acquisition_id=result["acquisition_id"],
             polygon_id=result["polygon_id"],
+            acquisition_date=result["acquisition_date"],
             calculation_date=result["calculation_date"],
             **result["stats"]
         ),

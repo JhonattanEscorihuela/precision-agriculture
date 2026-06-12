@@ -2101,3 +2101,52 @@ python scripts/validate_texture.py
 ---
 
 **Estado actual:** Fix aplicado, pendiente re-ejecutar validación completa
+
+---
+
+# ERROR #13: Infinite loop - Array dependencies in useEffect (2026-06-12)
+
+**Síntoma:** Backend container con CPU alto (44%) cuando se carga `/cultivos`. Requests infinitas a `/api/ndvi/polygon/{id}`.
+
+**Causa raíz:**
+```typescript
+// ❌ MAL - polygonIds es nuevo array en cada render
+const polygonIds = polygons.map(p => p.id);
+useEffect(() => {
+  fetchHealth();
+}, [polygonIds, token]); // polygonIds cambia cada render → loop infinito
+```
+
+**Explicación:**
+- `polygons.map()` crea un NUEVO array en cada render
+- Aunque los contenidos sean iguales `[6, 7]`, la referencia cambia
+- React detecta `polygonIds` como "diferente" → ejecuta effect
+- `setHealth()` causa re-render → vuelve al paso 1 ♻️
+
+**Solución:**
+```typescript
+// ✅ BIEN - Usar valor primitivo estable
+useEffect(() => {
+  fetchHealth();
+}, [polygonIds.join(','), token]); // "6,7" solo cambia si los IDs cambian
+
+// O usar useMemo:
+const polygonIds = useMemo(() => polygons.map(p => p.id), [polygons]);
+useEffect(() => {
+  fetchHealth();
+}, [polygonIds, token]);
+```
+
+**Lección:** 
+- **NUNCA usar arrays/objetos directos en dependencies** a menos que estén memoizados
+- Usar `.join()`, `JSON.stringify()`, o `useMemo()` para estabilizar referencias
+- Añadir console.log al principio del effect para detectar loops temprano
+
+**Detección:**
+- Backend con CPU > 30% sin carga real
+- Same request repetido en logs
+- Browser DevTools → Network tab muestra requests infinitas
+
+**Archivos afectados:**
+- `frontend/app/hooks/usePolygonHealth.ts`
+

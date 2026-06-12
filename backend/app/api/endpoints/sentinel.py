@@ -2,6 +2,7 @@
 Endpoints API para adquisición de imágenes Sentinel-2.
 """
 
+import logging
 from fastapi import APIRouter, HTTPException, Depends, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,7 @@ from app.crud.polygon import get_polygon_by_id
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _build_geojson_geometry(coordinates: list) -> dict:
@@ -538,13 +540,18 @@ async def acquire_bands(
     }
     ```
     """
+    logger.info(f"🚀 [acquire_bands] START - polygon_id={request.polygon_id}, date={request.date}")
+
     # Obtener el polígono de la base de datos
     polygon = await get_polygon_by_id(db, request.polygon_id)
     if not polygon:
+        logger.error(f"❌ [acquire_bands] Polygon {request.polygon_id} not found")
         raise HTTPException(
             status_code=404,
             detail=f"Polygon {request.polygon_id} not found"
         )
+
+    logger.info(f"✅ [acquire_bands] Polygon found: {polygon.name}")
 
     # Construir geometría GeoJSON
     geojson_geometry = _build_geojson_geometry(polygon.coordinates)
@@ -553,6 +560,7 @@ async def acquire_bands(
     service = SentinelService()
 
     try:
+        logger.info(f"📡 [acquire_bands] Calling service.acquire_bands...")
         result = await service.acquire_bands(
             polygon_coords=geojson_geometry["coordinates"][0],
             date=request.date,
@@ -563,13 +571,16 @@ async def acquire_bands(
             max_cloud_coverage=20
         )
 
+        logger.info(f"✅ [acquire_bands] Success - acquisition_id={result.get('acquisition_id')}, already_existed={result.get('already_existed', False)}")
         return AcquireBandsResponse(**result)
 
     except ValueError as e:
         # Error de validación (ej: banda > 10MB)
+        logger.error(f"❌ [acquire_bands] Validation error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
     except Exception as e:
+        logger.error(f"❌ [acquire_bands] Unexpected error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to acquire bands: {str(e)}"

@@ -35,6 +35,8 @@ export function usePolygonHealth(polygonIds: number[]) {
         return;
       }
 
+      console.log('🏥 [usePolygonHealth] Fetching health for polygons:', polygonIds);
+
       const healthData: PolygonHealth = {};
 
       // Consultar último NDVI de cada parcela
@@ -95,7 +97,7 @@ export function usePolygonHealth(polygonIds: number[]) {
     };
 
     fetchHealth();
-  }, [polygonIds, token]);
+  }, [polygonIds.join(','), token]); // Usar string estable en lugar de array
 
   return { health, isLoading };
 }
