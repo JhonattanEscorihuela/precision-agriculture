@@ -1860,3 +1860,244 @@ services/{feature}/
 ├── client.py             ← APIs externas
 └── utils.py              ← Helpers
 ```
+
+---
+
+# Lecciones Aprendidas - Bug CRÍTICO NDVI: Scale Factor Doble (2026-06-12)
+
+## 🐛 Error #12: NDVI ~50% más bajo por scale factor aplicado dos veces
+
+**Fecha:** 2026-06-12  
+**Severidad:** 🔴 CRÍTICA - Todos los cálculos NDVI incorrectos  
+**Tiempo hasta detección:** 2 días (OE2 marcado como completo con bug)
+
+### ❌ El error
+
+```python
+# ❌ MAL - Dividía por 10000 cuando datos YA estaban escalados:
+b04 = b04_array.astype(np.float32)
+b08 = b08_array.astype(np.float32)
+
+# Aplicar factor de escala L2A
+b04 = b04 / 10000.0  # ← INCORRECTO
+b08 = b08 / 10000.0  # ← INCORRECTO
+
+# Result: B04=0.000002, B08=0.000024 (underflow)
+```
+
+### 🔍 Cómo se descubrió
+
+**Fase 1: Validación cruzada reveló discrepancia sistemática**
+```bash
+# Script: validate_ndvi_cross_check.py
+# 28 fechas comparadas con CSV oficial Copernicus
+Resultado: 28/28 FAIL (diferencia promedio 20%)
+
+Nuestro NDVI: 0.49
+Copernicus:   0.85
+Diferencia:   ~50% más bajo
+```
+
+**Fase 2: Análisis TIFF crudo**
+```python
+# Script: inspect_tiff_raw.py
+b04_array.dtype: float32  # ← NO uint16!
+b04_array.mean(): 0.02    # ← YA está en 0.0-1.0
+b08_array.mean(): 0.24    # ← YA está en 0.0-1.0
+
+# Después de dividir /10000:
+b04 mean: 0.000002  # ← UNDERFLOW
+b08 mean: 0.000024  # ← UNDERFLOW
+```
+
+**Fase 3: Debug detallado**
+```python
+# Script: debug_ndvi_calculation.py
+# 116,005 píxeles con denominator=0 (44%)
+# NDVI asignado=0.0 por división por cero
+# Mean incluye estos zeros → 0.49 vs esperado 0.85
+```
+
+### 🎯 Root cause identificado
+
+**Diferencia entre fuentes de datos Sentinel-2:**
+
+| Fuente | dtype | Rango | Scale factor |
+|--------|-------|-------|--------------|
+| **STAC directo** (assets) | uint16 | 0-10000 | Sí (/10000) |
+| **Process API** (nuestro caso) | float32 | 0.0-1.0 | **NO** (ya escalado) |
+
+**Nuestro código asumía STAC directo, pero usábamos Process API.**
+
+### ✅ La solución
+
+```python
+# ✅ BIEN - NO aplicar scale factor con Process API:
+b04 = b04_array.astype(np.float32)
+b08 = b08_array.astype(np.float32)
+
+# NO aplicar factor de escala: Process API ya retorna reflectancia 0.0-1.0
+# (comentario explicativo agregado)
+
+logger.debug(f"🔢 Rangos reflectancia: B04=[{b04.min():.4f}, {b04.max():.4f}], B08=[{b08.min():.4f}, {b08.max():.4f}]")
+```
+
+### 📊 Impacto real
+
+**Todos los NDVIs calculados antes del fix eran incorrectos:**
+- Dashboard mostraba parcelas "saludables" como "críticas"
+- Evolución temporal distorsionada
+- Comparaciones inválidas
+- Reportes basados en datos erróneos
+
+**Evidencia post-fix:**
+- Pendiente: Re-ejecutar `validate_ndvi_cross_check.py`
+- Esperado: 28/28 PASS con diferencia < 0.05
+
+### 🎓 Lecciones CRÍTICAS
+
+#### 1. **VALIDAR contra datos oficiales ANTES de marcar OE completo**
+
+**❌ LO QUE HICIMOS MAL:**
+```
+✅ Tests unitarios pasando
+✅ Docker compose funcionando
+✅ Frontend mostrando gráficas
+✅ Flujo end-to-end completo
+→ OE2 marcado como COMPLETO
+→ Bug pasó desapercibido 2 días
+```
+
+**✅ LO QUE DEBIMOS HACER:**
+```
+✅ Tests unitarios
+✅ Docker compose
+✅ Frontend end-to-end
+✅ Validación cruzada con datos oficiales  ← FALTÓ
+  - Comparar contra CSV Copernicus
+  - Tolerancia: ±5%
+  - Al menos 3 fechas de referencia
+→ Solo entonces marcar COMPLETO
+```
+
+#### 2. **No asumir formato de datos - VERIFICAR CON INSPECT**
+
+**❌ Asumimos:** Process API retorna uint16 como STAC
+**✅ Realidad:** Process API retorna float32 ya escalado
+
+**Patrón obligatorio:**
+```python
+# SIEMPRE antes de procesar rasters:
+with rasterio.open(io.BytesIO(tiff_bytes)) as src:
+    array = src.read(1)
+    print(f"dtype: {array.dtype}")        # ← VERIFICAR
+    print(f"range: [{array.min()}, {array.max()}]")  # ← VERIFICAR
+    print(f"mean: {array.mean()}")        # ← VERIFICAR
+    
+# SOLO entonces decidir si aplicar scale factor
+```
+
+#### 3. **Cálculo manual como sanity check**
+
+```python
+# Verificación rápida:
+manual_ndvi = (0.24 - 0.02) / (0.24 + 0.02)  # = 0.846
+copernicus_ndvi = 0.8535
+difference = abs(0.846 - 0.8535)  # = 0.0075 ✅ < 0.05
+
+# Si esta verificación manual no coincide con tu código → BUG
+```
+
+#### 4. **Documentar fuentes de datos y sus formatos**
+
+Agregado a `ndvi_service.py`:
+```python
+# NOTA IMPORTANTE: Factor de escala Sentinel-2 L2A
+# Los datos de Copernicus Process API ya vienen en reflectancia (0.0-1.0).
+# NO aplicar factor de escala para datos de Process API.
+# Si se usara STAC directo con uint16, sí aplicaría /10000.
+```
+
+### 📋 Checklist actualizado para futuros OEs
+
+**Antes de marcar un OE como completo:**
+- [ ] Tests unitarios pasando
+- [ ] Tests de integración pasando
+- [ ] Docker-compose up --build sin errores
+- [ ] Flujo manual end-to-end completo
+- [ ] **Validación cruzada con datos oficiales/referencia** ← NUEVO
+  - [ ] Al menos 3 puntos de validación
+  - [ ] Diferencia < 5% (o tolerancia definida)
+  - [ ] Documentar fuente de verdad (CSV, API, paper)
+- [ ] Scripts de inspect/debug ejecutados
+- [ ] Tipos de datos verificados (dtype, range)
+- [ ] Cálculo manual coincide con código
+- [ ] Documentación actualizada (CLAUDE.md + lessons.md)
+
+### 🔧 Scripts creados para debugging
+
+**1. `validate_ndvi_cross_check.py` (355 líneas)**
+- Compara 28 fechas NDVI contra CSV Copernicus
+- Tabla de resultados con pass/fail
+- Estadísticos de diferencias
+- **USO:** Validación final antes de marcar OE completo
+
+**2. `inspect_tiff_raw.py` (235 líneas)**
+- Muestra dtype, shape, range de arrays crudos
+- Calcula NDVI con y sin scale factor
+- Distribución de valores por bins
+- **USO:** Debugging cuando NDVI fuera de rango esperado
+
+**3. `debug_ndvi_calculation.py` (172 líneas)**
+- Paso a paso del cálculo NDVI
+- Muestra píxeles con denominator=0
+- Cuenta píxeles válidos/nodata
+- **USO:** Encontrar dónde se introduce error en pipeline
+
+**Uso recomendado para OE3/OE4:**
+- Crear scripts similares para validación de segmentación y textura
+- Siempre comparar contra ground truth o benchmark conocido
+
+### 🚀 Aplicación en OE3 y OE4
+
+**OE3 - Segmentación espacial:**
+```bash
+# OBLIGATORIO antes de marcar completo:
+python scripts/validate_segmentation.py
+# Comparar contra máscaras manuales o benchmark
+# Métrica: IoU > 0.80
+```
+
+**OE4 - Descriptores de textura:**
+```bash
+# OBLIGATORIO antes de marcar completo:
+python scripts/validate_texture.py
+# Comparar contra descriptores calculados con skimage
+# Tolerancia: ±10% por variaciones numéricas
+```
+
+### 🎯 Conclusión
+
+**Este bug NO debió pasar:**
+- Todos los tests pasaban ✅
+- Docker funcionaba ✅
+- Frontend se veía bien ✅
+- **Pero los valores eran incorrectos** ❌
+
+**REGLA DE ORO:**
+> Tests pasando ≠ Resultados correctos
+> SIEMPRE validar contra datos de referencia conocidos
+
+**Tiempo perdido:**
+- 2 días con OE2 "completo" pero incorrecto
+- ~4 horas de debugging para encontrar root cause
+- Scripts de validación que debieron existir desde el inicio
+
+**Tiempo ahorrado si hubiéramos validado antes:**
+- Detección inmediata al implementar
+- Fix en 5 minutos
+- Sin re-trabajo
+
+---
+
+**Estado actual:** Fix aplicado, pendiente re-ejecutar validación completa

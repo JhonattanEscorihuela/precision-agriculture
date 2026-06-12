@@ -33,6 +33,9 @@ class NDVIStatsResponse(BaseModel):
         ge=0,
         description="Desviación estándar NDVI. Puede ser 0 si imagen uniforme."
     )
+    ndvi_median: Optional[float] = Field(None, ge=-1, le=1, description="Mediana NDVI")
+    ndvi_p10: Optional[float] = Field(None, ge=-1, le=1, description="Percentil 10 NDVI")
+    ndvi_p90: Optional[float] = Field(None, ge=-1, le=1, description="Percentil 90 NDVI")
     width: int = Field(..., description="Ancho del raster en píxeles")
     height: int = Field(..., description="Alto del raster en píxeles")
 
@@ -41,11 +44,15 @@ class NDVIStatsResponse(BaseModel):
             "example": {
                 "acquisition_id": 1,
                 "polygon_id": 1,
+                "acquisition_date": "2026-06-08",
                 "calculation_date": "2026-06-08T10:30:00Z",
                 "ndvi_mean": 0.6523,
                 "ndvi_min": -0.1234,
                 "ndvi_max": 0.8765,
                 "ndvi_std": 0.1432,
+                "ndvi_median": 0.6789,
+                "ndvi_p10": 0.4532,
+                "ndvi_p90": 0.8123,
                 "width": 512,
                 "height": 512
             }
@@ -74,11 +81,15 @@ class NDVICalculateResponse(BaseModel):
                 "stats": {
                     "acquisition_id": 1,
                     "polygon_id": 1,
+                    "acquisition_date": "2026-06-08",
                     "calculation_date": "2026-06-08T10:30:00Z",
                     "ndvi_mean": 0.6523,
                     "ndvi_min": -0.1234,
                     "ndvi_max": 0.8765,
                     "ndvi_std": 0.1432,
+                    "ndvi_median": 0.6789,
+                    "ndvi_p10": 0.4532,
+                    "ndvi_p90": 0.8123,
                     "width": 512,
                     "height": 512
                 },

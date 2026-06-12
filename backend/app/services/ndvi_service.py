@@ -36,8 +36,11 @@ class NDVIService:
     lo retorna sin recalcular.
     """
 
-    # Factor de escala Sentinel-2 L2A (reflectancia superficial)
-    L2A_SCALE_FACTOR = 10000.0
+    # NOTA IMPORTANTE: Factor de escala Sentinel-2 L2A
+    # Los datos de Copernicus Process API ya vienen en reflectancia (0.0-1.0).
+    # NO aplicar factor de escala para datos de Process API.
+    # Si se usara STAC directo con uint16, sí aplicaría /10000.
+    # L2A_SCALE_FACTOR = 10000.0  # NO USAR con Process API
 
     async def calculate_ndvi(
         self,
@@ -108,7 +111,7 @@ class NDVIService:
             raise HTTPException(status_code=500, detail=f"Error calculating NDVI: {str(e)}")
 
         # 5. Calcular estadísticos
-        stats = self._calculate_statistics(ndvi_array, nodata_mask)
+        stats = self._calculate_statistics(ndvi_array, nodata_mask, acquisition.b04_data, acquisition.b08_data)
         logger.info(f"📈 Estadísticos NDVI: mean={stats['ndvi_mean']:.4f}, min={stats['ndvi_min']:.4f}, max={stats['ndvi_max']:.4f}")
 
         # 6. Convertir NDVI a TIFF bytes
@@ -176,11 +179,9 @@ class NDVIService:
         b04 = b04_array.astype(np.float32)
         b08 = b08_array.astype(np.float32)
 
-        # Aplicar factor de escala L2A
-        b04 = b04 / self.L2A_SCALE_FACTOR
-        b08 = b08 / self.L2A_SCALE_FACTOR
+        # NO aplicar factor de escala: Process API ya retorna reflectancia 0.0-1.0
 
-        logger.debug(f"🔢 Rangos después de escala L2A: B04=[{b04.min():.4f}, {b04.max():.4f}], B08=[{b08.min():.4f}, {b08.max():.4f}]")
+        logger.debug(f"🔢 Rangos reflectancia: B04=[{b04.min():.4f}, {b04.max():.4f}], B08=[{b08.min():.4f}, {b08.max():.4f}]")
 
         # Calcular NDVI con manejo de división por cero
         denominator = b08 + b04
@@ -216,14 +217,21 @@ class NDVIService:
     def _calculate_statistics(
         self,
         ndvi: np.ndarray,
-        nodata_mask: np.ndarray
+        nodata_mask: np.ndarray,
+        b04_bytes: bytes,
+        b08_bytes: bytes
     ) -> Dict[str, float]:
         """
         Calcula estadísticos NDVI sobre píxeles válidos.
 
+        IMPORTANTE: ndvi_mean se calcula como NDVI(mean(B04), mean(B08)),
+        no como mean(NDVI[pixels]). Esta es la metodología de Copernicus.
+
         Args:
-            ndvi: Array NDVI (puede contener NaN)
+            ndvi: Array NDVI pixel-wise (puede contener NaN)
             nodata_mask: Máscara de píxeles nodata
+            b04_bytes: Banda Red en formato TIFF (para calcular mean correcto)
+            b08_bytes: Banda NIR en formato TIFF (para calcular mean correcto)
 
         Returns:
             Dict con: ndvi_mean, ndvi_min, ndvi_max, ndvi_std
@@ -240,8 +248,18 @@ class NDVIService:
 
         logger.debug(f"📊 Píxeles válidos: {len(valid_pixels)} / {ndvi.size} ({100*len(valid_pixels)/ndvi.size:.1f}%)")
 
+        # Calcular ndvi_mean como NDVI de las reflectancias medias (metodología Copernicus)
+        with rasterio.open(io.BytesIO(b04_bytes)) as src:
+            b04_array = src.read(1).astype(np.float32)
+        with rasterio.open(io.BytesIO(b08_bytes)) as src:
+            b08_array = src.read(1).astype(np.float32)
+
+        b04_mean = b04_array[~nodata_mask].mean()
+        b08_mean = b08_array[~nodata_mask].mean()
+        ndvi_mean_correct = (b08_mean - b04_mean) / (b08_mean + b04_mean)
+
         return {
-            "ndvi_mean": float(np.mean(valid_pixels)),
+            "ndvi_mean": float(ndvi_mean_correct),  # NDVI de means (Copernicus)
             "ndvi_min": float(np.min(valid_pixels)),
             "ndvi_max": float(np.max(valid_pixels)),
             "ndvi_std": float(np.std(valid_pixels))

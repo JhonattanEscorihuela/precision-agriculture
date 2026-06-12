@@ -31,6 +31,18 @@ class NDVIResultBase(SQLModel):
     ndvi_std: float = Field(
         description="Desviación estándar NDVI ([0, +∞)). Puede ser 0 si imagen uniforme."
     )
+    ndvi_median: Optional[float] = Field(
+        default=None,
+        description="Mediana NDVI ([-1, 1]). Robusto contra outliers."
+    )
+    ndvi_p10: Optional[float] = Field(
+        default=None,
+        description="Percentil 10 NDVI ([-1, 1]). Límite inferior distribución."
+    )
+    ndvi_p90: Optional[float] = Field(
+        default=None,
+        description="Percentil 90 NDVI ([-1, 1]). Límite superior distribución."
+    )
 
     # Metadatos del raster
     width: int = Field(description="Ancho del raster NDVI en píxeles")
@@ -76,6 +88,9 @@ class NDVIResult(NDVIResultBase, table=True):
                 "ndvi_min": -0.1234,
                 "ndvi_max": 0.8765,
                 "ndvi_std": 0.1432,
+                "ndvi_median": 0.6789,
+                "ndvi_p10": 0.4532,
+                "ndvi_p90": 0.8123,
                 "width": 512,
                 "height": 512,
                 "calculation_date": "2026-06-08T10:30:00Z",
