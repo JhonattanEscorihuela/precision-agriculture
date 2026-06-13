@@ -2192,9 +2192,9 @@ ndvi_calculated_dates = {
 - Cascada: mount → setStartDate → useEffect dispara fetch → setEndDate → useEffect dispara otro fetch
 - Fechas diferentes entre calls porque `getSmartDates()` se ejecuta en milisegundos distintos
 
-### 4. Debounce aplicado siempre
-- Debounce de 400ms se aplica incluso al abrir panel por primera vez
-- Usuario percibe delay innecesario
+### 4. Fetch inicial sin optimizar
+- Fetch al abrir panel por primera vez no estaba diferenciado de cambios manuales
+- Solución: usar `useRef` para fetch inmediato en mount, debounce solo para edición manual
 
 **Soluciones implementadas:**
 
@@ -2322,9 +2322,10 @@ useEffect(() => {
    - ✅ Dejar session sin `begin()` explícito, confiar en `commit()` manual en CRUDs
 
 **Impacto de performance:**
-- SQL queries: de 750+ a ~10 por request
-- Panel load time: de 400ms+ delay a instantáneo
-- User experience: fluida sin lag perceptible
+- SQL queries: de 30+ queries N+1 individuales a 1 query bulk con IN clause (verificado en logs: 3 queries totales por request — SELECT polygon, SELECT sentinel_acquisitions, SELECT ndvi_results.acquisition_id con IN clause)
+- Double request eliminado: confirmado en logs, 1 solo request `GET /api/sentinel/available-dates` al abrir modal
+- Fetch se dispara al seleccionar polígono, con debounce de 400ms para edición manual de fechas
+- User experience: fluida sin lag perceptible al abrir panel
 
 **Archivos modificados:**
 - `backend/main.py` - Logging config
