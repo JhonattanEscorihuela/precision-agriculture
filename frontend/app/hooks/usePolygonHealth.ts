@@ -35,7 +35,6 @@ export function usePolygonHealth(polygonIds: number[]) {
         return;
       }
 
-      console.log('🏥 [usePolygonHealth] Fetching health for polygons:', polygonIds);
 
       const healthData: PolygonHealth = {};
 

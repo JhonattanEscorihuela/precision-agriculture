@@ -103,7 +103,6 @@ export default function SentinelPanel({
   }, [startDate, endDate]);
 
   const fetchAvailableDates = async (resetAcquisitionState = true) => {
-    console.log('📅 [SentinelPanel] fetchAvailableDates START', {
       polygonId,
       startDate,
       endDate,
@@ -122,41 +121,34 @@ export default function SentinelPanel({
 
     try {
       const url = `http://localhost:8000/api/sentinel/available-dates/${polygonId}?start_date=${startDate}&end_date=${endDate}&max_cloud=20`;
-      console.log('📤 [SentinelPanel] GET', url);
 
       const response = await fetch(url);
 
-      console.log('📥 [SentinelPanel] Dates response', {
         status: response.status,
         ok: response.ok
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ [SentinelPanel] Dates error response', errorText);
         throw new Error('Error al consultar fechas');
       }
 
       const data = await response.json();
-      console.log('✅ [SentinelPanel] Dates received', {
         count: data.dates?.length || 0,
         dates: data.dates
       });
       setDates(data.dates || []);
     } catch (error) {
-      console.error('❌ [SentinelPanel] Exception in fetchAvailableDates:', error);
       setDates([]);
       setErrorMessage('Error al consultar fechas disponibles');
     } finally {
       setIsLoadingDates(false);
-      console.log('🏁 [SentinelPanel] fetchAvailableDates END');
     }
   };
 
   const handleAcquire = async () => {
     if (!selectedDate) return;
 
-    console.log('🚀 [SentinelPanel] handleAcquire START', {
       polygonId,
       selectedDate,
       timestamp: new Date().toISOString()
@@ -173,7 +165,6 @@ export default function SentinelPanel({
         date: selectedDate,
       };
 
-      console.log('📤 [SentinelPanel] Sending POST /acquire', requestPayload);
 
       const response = await fetch('http://localhost:8000/api/sentinel/acquire', {
         method: 'POST',
@@ -183,7 +174,6 @@ export default function SentinelPanel({
         body: JSON.stringify(requestPayload),
       });
 
-      console.log('📥 [SentinelPanel] Response received', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok
@@ -191,12 +181,10 @@ export default function SentinelPanel({
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ [SentinelPanel] Error response', errorData);
         throw new Error(errorData.detail || 'Error al adquirir imagen');
       }
 
       const data = await response.json();
-      console.log('✅ [SentinelPanel] Success response', data);
 
       setAcquisitionSuccess(true);
 
@@ -210,15 +198,12 @@ export default function SentinelPanel({
       }
 
       // Refrescar fechas para actualizar badges (sin resetear estado de adquisición)
-      console.log('🔄 [SentinelPanel] Refreshing available dates...');
       fetchAvailableDates(false);
     } catch (error) {
-      console.error('❌ [SentinelPanel] Exception caught:', error);
       setAcquisitionError(true);
       setErrorMessage(error instanceof Error ? error.message : 'Error desconocido');
     } finally {
       setIsAcquiring(false);
-      console.log('🏁 [SentinelPanel] handleAcquire END');
     }
   };
 

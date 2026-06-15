@@ -298,3 +298,20 @@ async with AsyncSession(engine) as session:   # ✅
 - **Simplicidad primero** — Cada cambio debe ser lo más simple posible. Impacto mínimo en el código.
 - **Sin atajos** — Encuentra la causa raíz. Sin parches temporales. Estándares de ingeniero senior.
 - **Impacto mínimo** — Los cambios solo tocan lo necesario. Evitar introducir nuevos bugs.
+
+## ❌ ERRORES QUE YA COMETIMOS — No repetir
+
+1. **useEffect con dependencias inestables**
+   No uses funciones o arrays/objetos creados en el render como dependencias de useEffect. Usa `useRef` para flags de control de flujo (ej: `isInitialFetchRef`). Revisa siempre si un setState dentro de un useEffect puede disparar otro useEffect.
+
+2. **No validar contra dato oficial antes de cerrar un OE**
+   Nunca reportes un OE como completo sin comparar el resultado contra una fuente externa verificable. En este proyecto: los CSVs de Copernicus son la fuente de verdad para NDVI.
+
+3. **Factor de escala en datos satelitales**
+   La Process API de Copernicus entrega reflectancias en [0.0, 1.0]. No dividir por 10000. Verificar siempre el rango de los datos crudos antes de aplicar fórmulas.
+
+4. **No inventar métricas en reportes**
+   Si no mediste algo (ej: "Panel load time: 0ms"), no lo escribas. Solo reportar métricas que existan en los logs o que se midieron explícitamente.
+
+5. **lessons.md no es un basurero**
+   Antes de agregar algo a lessons.md preguntarse: ¿cambia cómo debo programar en el futuro? → Es una regla, va destilada aquí en una línea. ¿Es solo el registro de qué pasó hoy? → Va a lessons.md, breve. ¿Ya existe una regla parecida? → No agregar otra.
