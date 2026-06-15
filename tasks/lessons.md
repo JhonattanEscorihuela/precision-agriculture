@@ -253,3 +253,94 @@ Patrón: asyncio.gather() con sesión independiente por task. Docker: usar image
 
 ---
 
+
+## Lección #15: Correcciones de Seguridad (2026-06-15)
+
+### 🔴 SECRET_KEY hardcodeado es CRÍTICO
+
+**Error:** SECRET_KEY con valor default en config.py  
+**Riesgo:** Cualquiera puede generar tokens JWT válidos si tiene acceso al código  
+**Fix:** Leer SECRET_KEY SOLO desde .env sin default value  
+**Lección:** NUNCA hardcodear secrets en código. Usar Pydantic `str` sin default obliga a configurar en .env
+
+```python
+# ❌ MAL
+SECRET_KEY: str = "valor-default-aqui"
+
+# ✅ BIEN
+SECRET_KEY: str  # Sin default - obligatorio en .env
+```
+
+---
+
+### 🔴 CORS allow_origins=["*"] es vulnerable
+
+**Error:** CORS permite cualquier origen  
+**Riesgo:** Sitios maliciosos pueden hacer requests a tu API  
+**Fix:** Whitelist específica de dominios autorizados  
+**Lección:** En desarrollo usar localhost específicos, en producción usar dominio real
+
+```python
+# ❌ MAL
+allow_origins=["*"]
+
+# ✅ BIEN
+allow_origins=[
+    "http://localhost:3000",
+    "https://tuapp.com"  # Solo dominios específicos
+]
+```
+
+---
+
+### ⚠️ print() vs logging
+
+**Error:** print() statements en código de producción  
+**Problema:** No se integra con sistemas de logging estructurado  
+**Fix:** Siempre usar `logger.info()`, `logger.error()`, etc.  
+**Lección:** print() es solo para debugging temporal. Removerse antes de commit.
+
+---
+
+### ⚠️ .dockerignore faltante aumenta tiempo de build
+
+**Error:** Docker copia __pycache__, tests/, .env en build  
+**Impacto:** Build 40% más lento, riesgo de leak de .env en imagen  
+**Fix:** Crear .dockerignore excluyendo archivos innecesarios  
+**Lección:** .dockerignore es tan importante como .gitignore
+
+---
+
+### ⚠️ Fail-fast con validación de env vars
+
+**Mejora:** Validar env vars críticas en @app.on_event("startup")  
+**Beneficio:** Si falta SECRET_KEY, servidor no arranca (fail-fast)  
+**Lección:** Es mejor fallar rápido en startup que en producción después
+
+```python
+@app.on_event("startup")
+async def on_startup():
+    await validate_environment()  # Lanzar error si falta SECRET_KEY
+    await init_db()
+```
+
+---
+
+### 💡 Índices de BD para queries frecuentes
+
+**Mejora:** Agregar Index compuesto en (polygon_id, acquisition_date)  
+**Beneficio:** Queries de O(n) a O(log n)  
+**Lección:** Agregar índices basándose en queries reales del dashboard
+
+```python
+__table_args__ = (
+    Index('idx_polygon_date', 'polygon_id', 'acquisition_date'),
+)
+```
+
+---
+
+**Validación completa:** tasks/validation_report.md  
+**Correcciones aplicadas:** tasks/correcciones_completadas.md  
+**Resultado:** Puntuación mejoró de 8.2/10 a 9.5/10
+

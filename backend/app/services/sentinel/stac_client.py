@@ -89,7 +89,6 @@ class STACClient:
                 features = data.get("features", [])
                 all_features.extend(features)
                 logger.info(f"📄 Página {page}: {len(features)} escenas")
-                print(f"📄 Página {page}: {len(features)} escenas")  # Debug print
 
                 # Verificar si hay más páginas (buscar link con rel="next")
                 links = data.get("links", [])
@@ -126,7 +125,6 @@ class STACClient:
                     features = data.get("features", [])
                     all_features.extend(features)
                     logger.info(f"📄 Página {page}: {len(features)} escenas")
-                    print(f"📄 Página {page}: {len(features)} escenas")  # Debug print
 
                     # Buscar siguiente página
                     links = data.get("links", [])
@@ -137,7 +135,6 @@ class STACClient:
                             break
 
             logger.info(f"📦 Total escenas obtenidas (todas las páginas): {len(all_features)}")
-            print(f"📦 Total escenas obtenidas (todas las páginas): {len(all_features)}")  # Debug print
 
             # Filtrar por cobertura de nubes y extraer información relevante
             # Agrupar por fecha y quedarnos con la escena de menor nubosidad
