@@ -21,6 +21,8 @@ from app.models.user import User
 from app.models.polygon import Polygon
 from app.models.acquisition import SentinelAcquisition
 from app.models.analysis import NDVIResult  # OE2
+from app.models.segmentation import SegmentationResult  # OE3
+from app.models.texture import TextureDescriptor  # OE4
 
 app = FastAPI()
 
