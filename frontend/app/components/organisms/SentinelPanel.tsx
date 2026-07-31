@@ -103,13 +103,6 @@ export default function SentinelPanel({
   }, [startDate, endDate]);
 
   const fetchAvailableDates = async (resetAcquisitionState = true) => {
-      polygonId,
-      startDate,
-      endDate,
-      resetAcquisitionState,
-      timestamp: new Date().toISOString()
-    });
-
     setIsLoadingDates(true);
     setSelectedDate(null);
 
@@ -124,19 +117,12 @@ export default function SentinelPanel({
 
       const response = await fetch(url);
 
-        status: response.status,
-        ok: response.ok
-      });
-
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error('Error al consultar fechas');
       }
 
       const data = await response.json();
-        count: data.dates?.length || 0,
-        dates: data.dates
-      });
       setDates(data.dates || []);
     } catch (error) {
       setDates([]);
@@ -148,11 +134,6 @@ export default function SentinelPanel({
 
   const handleAcquire = async () => {
     if (!selectedDate) return;
-
-      polygonId,
-      selectedDate,
-      timestamp: new Date().toISOString()
-    });
 
     setIsAcquiring(true);
     setAcquisitionSuccess(false);
@@ -172,11 +153,6 @@ export default function SentinelPanel({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestPayload),
-      });
-
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
       });
 
       if (!response.ok) {
