@@ -32,9 +32,12 @@ class TextureDescriptorBase(SQLModel):
     min_val: float = Field(description="Valor mínimo de la respuesta")
     max_val: float = Field(description="Valor máximo de la respuesta")
 
-    # Métrica de calidad
+    # Métricas de calidad
+    std_normalized: float = Field(
+        description="Desviación estándar calculada sobre respuestas normalizadas [0,1] (criterio discriminativo)"
+    )
     discriminative: bool = Field(
-        description="True si std > threshold (descriptor discriminativo). Indica que la textura tiene variabilidad útil."
+        description="True si std_normalized > threshold (descriptor discriminativo). Indica que la textura tiene variabilidad útil."
     )
 
 
@@ -84,6 +87,7 @@ class TextureDescriptor(TextureDescriptorBase, table=True):
                 "std": 8.32,
                 "min_val": 0.12,
                 "max_val": 45.67,
+                "std_normalized": 0.25,
                 "discriminative": True,
                 "calculation_date": "2026-07-31T10:30:00Z",
                 "created_at": "2026-07-31T10:30:00Z"

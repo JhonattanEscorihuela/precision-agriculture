@@ -23,7 +23,9 @@ async def create(
     std: float,
     min_val: float,
     max_val: float,
-    discriminative: bool
+    std_normalized: float,
+    discriminative: bool,
+    auto_commit: bool = False
 ) -> TextureDescriptor:
     """
     Guarda un nuevo descriptor de textura en la base de datos.
@@ -37,10 +39,14 @@ async def create(
         std: Desviación estándar de la respuesta
         min_val: Valor mínimo de la respuesta
         max_val: Valor máximo de la respuesta
+        std_normalized: Desviación estándar sobre respuestas normalizadas [0,1]
         discriminative: True si el descriptor es discriminativo
+        auto_commit: Si True, hace commit inmediatamente. Si False (default),
+                     el servicio debe hacer commit manualmente (para atomicidad multi-descriptor)
 
     Returns:
-        TextureDescriptor: Registro creado con ID asignado
+        TextureDescriptor: Registro creado con ID asignado (si auto_commit=True)
+                          o pendiente de commit (si auto_commit=False)
 
     Raises:
         IntegrityError: Si ya existe descriptor para (segmentation_result_id, kernel_type) (UNIQUE constraint)
@@ -54,16 +60,21 @@ async def create(
             std=std,
             min_val=min_val,
             max_val=max_val,
+            std_normalized=std_normalized,
             discriminative=discriminative,
             calculation_date=datetime.utcnow(),
             created_at=datetime.utcnow()
         )
         db.add(db_descriptor)
-        await db.commit()
-        await db.refresh(db_descriptor)
+
+        if auto_commit:
+            await db.commit()
+            await db.refresh(db_descriptor)
+
         return db_descriptor
     except Exception as e:
-        await db.rollback()
+        if auto_commit:
+            await db.rollback()
         logger.error(f"❌ Error saving texture descriptor: {str(e)}")
         logger.error(f"   segmentation_result_id={segmentation_result_id}, kernel_type={kernel_type}")
         raise

@@ -12,7 +12,7 @@ logging.basicConfig(
 logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
 
 from fastapi import FastAPI
-from app.api.endpoints import polygons, auth, sentinel, ndvi, ndvi_batch, segmentation  # Importa los routers
+from app.api.endpoints import polygons, auth, sentinel, ndvi, ndvi_batch, segmentation, texture, analysis, phenology  # Importa los routers
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
 
@@ -48,6 +48,9 @@ app.include_router(sentinel.router, prefix="/api/sentinel", tags=["Sentinel-2"])
 app.include_router(ndvi.router, prefix="/api/ndvi", tags=["NDVI"])  # OE2
 app.include_router(ndvi_batch.router, prefix="/api/ndvi", tags=["NDVI Batch"])  # OE2 - Batch processing
 app.include_router(segmentation.router, prefix="/api/segmentation", tags=["Segmentation"])  # OE3
+app.include_router(texture.router, prefix="/api/texture", tags=["Texture"])  # OE4
+app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis Pipeline"])  # OE3+OE4
+app.include_router(phenology.router, prefix="/api/phenology", tags=["Phenology"])  # OE3
 
 @app.on_event("startup")
 async def on_startup():
