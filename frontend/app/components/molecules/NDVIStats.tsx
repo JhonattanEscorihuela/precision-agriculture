@@ -21,8 +21,7 @@ interface NDVIStatsProps {
  * Tarjeta que muestra estadísticos NDVI en grid 2x2 responsive.
  * Incluye badge coloreado para el promedio y botón opcional de descarga.
  */
-export default function NDVIStats({ stats, onDownload }: NDVIStatsProps) {
-  const StatItem = ({
+const StatItem = ({
     label,
     value,
     isMean = false,
@@ -59,8 +58,9 @@ export default function NDVIStats({ stats, onDownload }: NDVIStatsProps) {
         </div>
       )}
     </div>
-  );
+);
 
+export default function NDVIStats({ stats, onDownload }: NDVIStatsProps) {
   return (
     <div className="space-y-4">
       {/* Grid 2x2 de estadísticos */}

@@ -73,21 +73,12 @@ export function usePolygonHealth(polygonIds: number[]) {
               lastUpdate: null
             };
           }
-        } catch (err: any) {
-          if (err.response?.status === 404) {
-            // No hay NDVI para esta parcela
-            healthData[polygonId] = {
-              status: 'unknown',
-              ndvi: null,
-              lastUpdate: null
-            };
-          } else {
-            healthData[polygonId] = {
-              status: 'unknown',
-              ndvi: null,
-              lastUpdate: null
-            };
-          }
+        } catch {
+          healthData[polygonId] = {
+            status: 'unknown',
+            ndvi: null,
+            lastUpdate: null
+          };
         }
       }
 

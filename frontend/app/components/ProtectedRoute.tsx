@@ -2,37 +2,20 @@
 
 import { useAuth } from '@/app/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const router = useRouter();
-  const [shouldRender, setShouldRender] = useState(false);
 
   useEffect(() => {
-    // Verificar token en localStorage primero (sincrónico)
-    const token = localStorage.getItem('token');
-
-    if (!token) {
-      // Sin token, redirigir inmediatamente sin mostrar contenido
+    if (!isLoading && (!token || !user)) {
       router.replace('/login');
-      return;
     }
-
-    // Con token, esperar validación del contexto
-    if (!isLoading) {
-      if (user) {
-        // Usuario válido, permitir renderizado
-        setShouldRender(true);
-      } else {
-        // Token inválido o expirado
-        router.replace('/login');
-      }
-    }
-  }, [user, isLoading, router]);
+  }, [user, token, isLoading, router]);
 
   // No renderizar nada hasta que se confirme autenticación
-  if (!shouldRender) {
+  if (isLoading || !token || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-emerald-50 to-green-100">
         <div className="flex flex-col items-center gap-4">
@@ -46,6 +29,6 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     );
   }
 
-  // Solo renderiza children cuando shouldRender es true
+  // Solo renderiza children cuando la autenticación está confirmada
   return <>{children}</>;
 }

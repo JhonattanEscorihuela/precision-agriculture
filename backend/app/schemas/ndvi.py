@@ -21,6 +21,7 @@ class NDVICalculateRequest(BaseModel):
 
 class NDVIStatsResponse(BaseModel):
     """Response con estadísticos NDVI (sin raster binario)."""
+    ndvi_result_id: int = Field(..., description="ID del resultado NDVI en BD")
     acquisition_id: int
     polygon_id: int
     acquisition_date: str = Field(..., description="Fecha de adquisición de la imagen satelital (YYYY-MM-DD)")
@@ -42,6 +43,7 @@ class NDVIStatsResponse(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
+                "ndvi_result_id": 1,
                 "acquisition_id": 1,
                 "polygon_id": 1,
                 "acquisition_date": "2026-06-08",
@@ -79,6 +81,7 @@ class NDVICalculateResponse(BaseModel):
                 "polygon_id": 1,
                 "calculation_date": "2026-06-08T10:30:00Z",
                 "stats": {
+                    "ndvi_result_id": 1,
                     "acquisition_id": 1,
                     "polygon_id": 1,
                     "acquisition_date": "2026-06-08",

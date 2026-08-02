@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import DateSelector from '../molecules/DateSelector';
 import AcquireButton from '../molecules/AcquireButton';
 import NDVIPanel from './NDVIPanel';
@@ -307,8 +308,8 @@ export default function SentinelPanel({
           )}
         </div>
 
-        {/* Footer con botón de adquisición */}
-        <div className="border-t border-gray-200 p-4 lg:p-6 bg-white">
+        {/* Footer con acciones de adquisición y análisis */}
+        <div className="space-y-3 border-t border-gray-200 bg-white p-4 lg:p-6">
           <AcquireButton
             isLoading={isAcquiring}
             isSuccess={acquisitionSuccess}
@@ -316,6 +317,15 @@ export default function SentinelPanel({
             disabled={!selectedDate}
             onClick={handleAcquire}
           />
+          <Link
+            href={`/cultivos/${polygonId}`}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-emerald-600 px-6 py-3 font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+          >
+            <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M4 19V9m5 10V5m5 14v-7m5 7V3" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+            </svg>
+            Ver dashboard de análisis
+          </Link>
         </div>
       </div>
     </>

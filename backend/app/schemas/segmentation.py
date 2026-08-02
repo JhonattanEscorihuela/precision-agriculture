@@ -33,7 +33,11 @@ class SegmentationRequest(BaseModel):
 class SegmentationResponse(BaseModel):
     """Response con métricas de segmentación."""
     id: int
-    acquisition_id: int = Field(..., description="ID del resultado NDVI")
+    ndvi_result_id: int = Field(..., description="ID del resultado NDVI")
+    acquisition_id: int = Field(
+        ...,
+        description="Alias compatible de ndvi_result_id; se conserva para clientes existentes"
+    )
     polygon_id: int
     calculation_date: str = Field(..., description="Fecha y hora del cálculo (ISO 8601)")
     threshold_used: float = Field(..., ge=0, le=1, description="Umbral aplicado")
@@ -47,6 +51,7 @@ class SegmentationResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "id": 1,
+                "ndvi_result_id": 1,
                 "acquisition_id": 1,
                 "polygon_id": 211,
                 "calculation_date": "2026-07-31T22:00:00Z",

@@ -248,7 +248,7 @@ export default function NuevaParcelaPage() {
                                 <span className="text-2xl">1️⃣</span>
                                 <div>
                                     <strong className="text-slate-800">Ve al mapa principal</strong>
-                                    <p className="text-sm text-slate-600">Haz clic en "Mapa Principal" en el menú</p>
+                                    <p className="text-sm text-slate-600">Haz clic en &quot;Mapa Principal&quot; en el menú</p>
                                 </div>
                             </div>
                             <div className="flex items-start gap-3 text-left">

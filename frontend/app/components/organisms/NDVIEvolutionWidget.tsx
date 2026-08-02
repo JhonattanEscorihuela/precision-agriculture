@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useDateRange } from '@/app/context/DateRangeContext';
 import axios from 'axios';
@@ -17,6 +17,7 @@ interface NDVIEvolutionWidgetProps {
   polygonId: number;
   polygonName: string;
   polygonCoordinates: number[][]; // Para calcular área
+  onAnalysisUpdated?: () => void | Promise<void>;
 }
 
 interface NDVIDataPoint {
@@ -30,6 +31,26 @@ interface NDVIDataPoint {
   ndvi_std: number;
 }
 
+interface AvailableDate {
+  ndvi_calculated?: boolean;
+}
+
+interface AvailableDatesResponse {
+  dates?: AvailableDate[];
+}
+
+interface BatchCalculationResponse {
+  newly_calculated: number;
+}
+
+interface ApiErrorResponse {
+  detail?: string;
+}
+
+function getAxiosError(error: unknown) {
+  return axios.isAxiosError<ApiErrorResponse>(error) ? error : null;
+}
+
 /**
  * Widget que muestra evolución temporal del NDVI con:
  * - Gráfica de línea con últimas 6 fechas
@@ -39,28 +60,25 @@ interface NDVIDataPoint {
 export default function NDVIEvolutionWidget({
   polygonId,
   polygonName,
-  polygonCoordinates
+  polygonCoordinates,
+  onAnalysisUpdated,
 }: NDVIEvolutionWidgetProps) {
   const { token } = useAuth();
-  const { range, getStartDate, getEndDate, setIsLoading: setGlobalLoading } = useDateRange();
+  const { getStartDate, getEndDate, setIsLoading: setGlobalLoading } = useDateRange();
   const [data, setData] = useState<NDVIDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [missingDates, setMissingDates] = useState<number>(0);
   const [isCalculatingBatch, setIsCalculatingBatch] = useState(false);
   const [batchProgress, setBatchProgress] = useState<string>('');
-  const [isFetching, setIsFetching] = useState(false);
+  const isFetchingRef = useRef(false);
 
   // Calcular área de la parcela
   const areaHectares = calculatePolygonArea(polygonCoordinates);
+  const selectedStartDate = getStartDate().toISOString().split('T')[0];
+  const selectedEndDate = getEndDate().toISOString().split('T')[0];
 
-  useEffect(() => {
-    if (!isFetching) {
-      fetchNDVIHistory();
-    }
-  }, [polygonId, range]);
-
-  const fetchNDVIHistory = async () => {
+  const fetchNDVIHistory = useCallback(async (): Promise<void> => {
     if (!token) {
       setError('No autenticado');
       setIsLoading(false);
@@ -68,20 +86,17 @@ export default function NDVIEvolutionWidget({
       return;
     }
 
-    if (isFetching) return;
+    if (isFetchingRef.current) return;
 
-    setIsFetching(true);
+    isFetchingRef.current = true;
     setIsLoading(true);
     setGlobalLoading(true);
     setError('');
 
     try {
-      const startDate = getStartDate().toISOString().split('T')[0];
-      const endDate = getEndDate().toISOString().split('T')[0];
-
       // Usa BD como caché - solo retorna NDVIs ya calculados en el rango
-      const response = await axios.get(
-        `http://localhost:8000/api/ndvi/polygon/${polygonId}?start_date=${startDate}&end_date=${endDate}`,
+      const response = await axios.get<NDVIDataPoint[]>(
+        `http://localhost:8000/api/ndvi/polygon/${polygonId}?start_date=${selectedStartDate}&end_date=${selectedEndDate}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -92,32 +107,33 @@ export default function NDVIEvolutionWidget({
 
       // Detectar fechas faltantes: consultar fechas disponibles en Sentinel
       try {
-        const availableResponse = await axios.get(
-          `http://localhost:8000/api/sentinel/available-dates/${polygonId}?start_date=${startDate}&end_date=${endDate}&max_cloud=20`
+        const availableResponse = await axios.get<AvailableDatesResponse>(
+          `http://localhost:8000/api/sentinel/available-dates/${polygonId}?start_date=${selectedStartDate}&end_date=${selectedEndDate}&max_cloud=20`
         );
         const availableDates = availableResponse.data.dates || [];
-        const calculatedDates = new Set(response.data.map((d: NDVIDataPoint) => d.acquisition_date));
-        const missing = availableDates.filter((d: any) => !d.ndvi_calculated).length;
+        const missing = availableDates.filter((date) => !date.ndvi_calculated).length;
         setMissingDates(missing);
-      } catch (e) {
+      } catch {
         setMissingDates(0);
       }
 
-    } catch (err: any) {
-      if (err.response?.status === 404 || err.response?.data?.detail?.includes('No NDVI results')) {
+    } catch (error: unknown) {
+      const requestError = getAxiosError(error);
+      if (
+        requestError?.response?.status === 404 ||
+        requestError?.response?.data?.detail?.includes('No NDVI results')
+      ) {
         // No hay datos calculados aún
         setData([]);
 
         // Verificar fechas disponibles
         try {
-          const startDate = getStartDate().toISOString().split('T')[0];
-          const endDate = getEndDate().toISOString().split('T')[0];
-          const availableResponse = await axios.get(
-            `http://localhost:8000/api/sentinel/available-dates/${polygonId}?start_date=${startDate}&end_date=${endDate}&max_cloud=20`
+          const availableResponse = await axios.get<AvailableDatesResponse>(
+            `http://localhost:8000/api/sentinel/available-dates/${polygonId}?start_date=${selectedStartDate}&end_date=${selectedEndDate}&max_cloud=20`
           );
           const availableDates = availableResponse.data.dates || [];
           setMissingDates(availableDates.length);
-        } catch (e) {
+        } catch {
           setMissingDates(0);
         }
       } else {
@@ -126,9 +142,13 @@ export default function NDVIEvolutionWidget({
     } finally {
       setIsLoading(false);
       setGlobalLoading(false);
-      setIsFetching(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [polygonId, selectedEndDate, selectedStartDate, setGlobalLoading, token]);
+
+  useEffect(() => {
+    void fetchNDVIHistory();
+  }, [fetchNDVIHistory]);
 
   const calculateBatch = async () => {
     if (!token) return;
@@ -138,15 +158,12 @@ export default function NDVIEvolutionWidget({
     setGlobalLoading(true);
 
     try {
-      const startDate = getStartDate().toISOString().split('T')[0];
-      const endDate = getEndDate().toISOString().split('T')[0];
-
-      const response = await axios.post(
+      const response = await axios.post<BatchCalculationResponse>(
         'http://localhost:8000/api/ndvi/calculate-batch',
         {
           polygon_id: polygonId,
-          start_date: startDate,
-          end_date: endDate,
+          start_date: selectedStartDate,
+          end_date: selectedEndDate,
           max_cloud: 20
         },
         {
@@ -163,15 +180,18 @@ export default function NDVIEvolutionWidget({
       }
 
       await fetchNDVIHistory();
+      await onAnalysisUpdated?.();
 
       setTimeout(() => {
         setBatchProgress('');
         setIsCalculatingBatch(false);
       }, 2000);
 
-    } catch (err: any) {
-      console.error('Batch calculation error:', err);
-      setError('Error al analizar imágenes: ' + (err.response?.data?.detail || err.message));
+    } catch (error: unknown) {
+      const requestError = getAxiosError(error);
+      const message = requestError?.response?.data?.detail
+        || (error instanceof Error ? error.message : 'Error desconocido');
+      setError('Error al analizar imágenes: ' + message);
       setIsCalculatingBatch(false);
       setGlobalLoading(false);
       setBatchProgress('');
@@ -362,7 +382,7 @@ export default function NDVIEvolutionWidget({
                 fontSize: '12px'
               }}
               labelStyle={{ fontWeight: 'bold', color: '#374151' }}
-              formatter={(value: number) => [value.toFixed(3), 'NDVI']}
+              formatter={(value) => [Number(value ?? 0).toFixed(3), 'NDVI']}
             />
             <ReferenceLine y={0.4} stroke="#f59e0b" strokeDasharray="3 3" />
             <ReferenceLine y={0.6} stroke="#10b981" strokeDasharray="3 3" />

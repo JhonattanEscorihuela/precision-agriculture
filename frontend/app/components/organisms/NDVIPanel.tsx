@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import axios from 'axios';
 import NDVIStats from '../molecules/NDVIStats';
@@ -30,6 +30,24 @@ interface NDVIData {
   };
 }
 
+interface ExistingNDVIResponse {
+  ndvi_result_id: number;
+  acquisition_id: number;
+  calculation_date: string;
+  ndvi_mean: number;
+  ndvi_min: number;
+  ndvi_max: number;
+  ndvi_std: number;
+}
+
+interface ApiErrorResponse {
+  detail?: string;
+}
+
+function getAxiosError(error: unknown) {
+  return axios.isAxiosError<ApiErrorResponse>(error) ? error : null;
+}
+
 /**
  * Panel completo para cálculo y visualización de NDVI.
  *
@@ -46,77 +64,74 @@ interface NDVIData {
  * 2. Usuario click "Calcular NDVI" → POST /api/ndvi/calculate
  * 3. Usuario vuelve a abrir → muestra stats sin recalcular
  */
-export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPanelProps) {
+export default function NDVIPanel({ acquisitionId, onClose }: NDVIPanelProps) {
   const { token } = useAuth();
   const [state, setState] = useState<PanelState>('loading');
   const [ndviData, setNdviData] = useState<NDVIData | null>(null);
   const [error, setError] = useState<string>('');
   const [alreadyFetched, setAlreadyFetched] = useState(false); // Caché local
 
-  // Al montar: verificar si ya existe NDVI calculado (solo una vez)
-  useEffect(() => {
-    if (!alreadyFetched) {
-      checkExistingNDVI();
-    }
-  }, [acquisitionId, alreadyFetched]);
-
-  const checkExistingNDVI = async (retryCount = 0) => {
-    if (!token) {
-      // Si no hay token, esperar un poco y reintentar (max 3 veces)
-      if (retryCount < 3) {
-        setTimeout(() => checkExistingNDVI(retryCount + 1), 300);
+  const checkExistingNDVI = useCallback(async (): Promise<void> => {
+    async function check(retryCount: number): Promise<void> {
+      if (!token) {
+        if (retryCount < 3) {
+          setTimeout(() => void check(retryCount + 1), 300);
+          return;
+        }
+        setError('No autenticado');
+        setState('error');
         return;
       }
-      setError('No autenticado');
-      setState('error');
-      return;
-    }
 
-    try {
-      const response = await axios.get(`http://localhost:8000/api/ndvi/${acquisitionId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
+      try {
+        const response = await axios.get<ExistingNDVIResponse>(
+          `http://localhost:8000/api/ndvi/${acquisitionId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = response.data;
+        setNdviData({
+          ndvi_id: data.ndvi_result_id,
+          calculation_date: data.calculation_date,
+          stats: {
+            ndvi_mean: data.ndvi_mean,
+            ndvi_min: data.ndvi_min,
+            ndvi_max: data.ndvi_max,
+            ndvi_std: data.ndvi_std
+          }
+        });
+        setState('calculated');
+        setAlreadyFetched(true);
+      } catch (error: unknown) {
+        const requestError = getAxiosError(error);
+        if (requestError?.response?.status === 404) {
+          setState('idle');
+          setAlreadyFetched(true);
+        } else if (requestError?.response?.status === 401) {
+          if (retryCount < 2) {
+            setTimeout(() => void check(retryCount + 1), 500);
+            return;
+          }
+          setError('Sesión expirada. Por favor, inicia sesión nuevamente');
+          setState('error');
+        } else {
+          if (retryCount < 1) {
+            setTimeout(() => void check(retryCount + 1), 300);
+            return;
+          }
+          setError('Error al verificar NDVI existente');
+          setState('error');
         }
-      });
-
-      // Mapear respuesta GET (estructura plana) a estructura esperada por el componente
-      const data = response.data;
-      setNdviData({
-        ndvi_id: data.acquisition_id, // GET no retorna ndvi_id, usar acquisition_id temporalmente
-        calculation_date: data.calculation_date,
-        stats: {
-          ndvi_mean: data.ndvi_mean,
-          ndvi_min: data.ndvi_min,
-          ndvi_max: data.ndvi_max,
-          ndvi_std: data.ndvi_std
-        }
-      });
-      setState('calculated');
-      setAlreadyFetched(true); // Marcar como consultado (caché)
-    } catch (err: any) {
-      if (err.response?.status === 404) {
-        // NDVI no existe, mostrar botón calcular
-        setState('idle');
-        setAlreadyFetched(true); // Marcar como consultado
-      } else if (err.response?.status === 401) {
-        // Si es 401 y es primer intento, reintentar después de un delay
-        if (retryCount < 2) {
-          setTimeout(() => checkExistingNDVI(retryCount + 1), 500);
-          return;
-        }
-        setError('Sesión expirada. Por favor, inicia sesión nuevamente');
-        setState('error');
-      } else {
-        // Otros errores, reintentar una vez
-        if (retryCount < 1) {
-          setTimeout(() => checkExistingNDVI(retryCount + 1), 300);
-          return;
-        }
-        setError('Error al verificar NDVI existente');
-        setState('error');
       }
     }
-  };
+
+    await check(0);
+  }, [acquisitionId, token]);
+
+  useEffect(() => {
+    if (!alreadyFetched) {
+      void checkExistingNDVI();
+    }
+  }, [alreadyFetched, checkExistingNDVI]);
 
   const calculateNDVI = async () => {
     if (!token) {
@@ -129,7 +144,7 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/ndvi/calculate', {
+      const response = await axios.post<NDVIData>('http://localhost:8000/api/ndvi/calculate', {
         acquisition_id: acquisitionId
       }, {
         headers: {
@@ -143,11 +158,12 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
         stats: response.data.stats
       });
       setState('calculated');
-    } catch (err: any) {
-      if (err.response?.status === 401) {
+    } catch (error: unknown) {
+      const requestError = getAxiosError(error);
+      if (requestError?.response?.status === 401) {
         setError('Sesión expirada. Por favor, inicia sesión nuevamente');
       } else {
-        setError(err.response?.data?.detail || 'Error al calcular NDVI');
+        setError(requestError?.response?.data?.detail || 'Error al calcular NDVI');
       }
       setState('error');
     }
@@ -160,7 +176,7 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
     }
 
     try {
-      const response = await axios.get(
+      const response = await axios.get<Blob>(
         `http://localhost:8000/api/ndvi/${acquisitionId}/tiff`,
         {
           responseType: 'blob',
@@ -178,8 +194,9 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
       document.body.appendChild(link);
       link.click();
       link.remove();
-    } catch (err: any) {
-      if (err.response?.status === 401) {
+    } catch (error: unknown) {
+      const requestError = getAxiosError(error);
+      if (requestError?.response?.status === 401) {
         setError('Sesión expirada');
       } else {
         setError('Error al descargar TIFF');
@@ -264,16 +281,6 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
               onDownload={downloadTIFF}
             />
 
-            {/* Nota sobre análisis espacial (OE3) */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="flex items-start gap-2">
-                <span className="text-lg">🔬</span>
-                <div className="flex-1 text-xs text-blue-700">
-                  <span className="font-semibold">Próximamente:</span> Análisis espacial
-                  por segmentación (OE3) para identificar zonas específicas del cultivo.
-                </div>
-              </div>
-            </div>
           </>
         )}
 
@@ -287,7 +294,7 @@ export default function NDVIPanel({ acquisitionId, polygonId, onClose }: NDVIPan
                 <h4 className="text-sm font-semibold text-red-900 mb-1">Error</h4>
                 <p className="text-sm text-red-700">{error}</p>
                 <button
-                  onClick={checkExistingNDVI}
+                  onClick={() => void checkExistingNDVI()}
                   className="mt-3 text-sm text-red-600 hover:text-red-800 underline"
                 >
                   Reintentar

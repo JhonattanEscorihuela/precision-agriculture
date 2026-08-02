@@ -1,56 +1,67 @@
-/**
- * OE4 - Widget placeholder de descriptores de textura (futuro).
- * Muestra skeleton animado mientras se implementa la funcionalidad.
- */
+/** OE4 - Contenedor del estado y la tabla de descriptores reales. */
 
-'use client';
+import type { ResourceState, TextureDescriptor } from '@/lib/analysisTypes';
+import TextureDescriptorsTable from '../molecules/TextureDescriptorsTable';
 
-export default function TextureWidget() {
+interface TextureWidgetProps {
+  state: ResourceState<TextureDescriptor[]>;
+  onRetry: () => void;
+}
+
+const formatCalculationDate = (date: string) =>
+  new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date));
+
+export default function TextureWidget({ state, onRetry }: TextureWidgetProps) {
+  const descriptors = state.data;
+
   return (
-    <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200 shadow-lg">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-2xl">🔬</span>
-        <h3 className="font-bold text-gray-900">Descriptores de Textura</h3>
-        <span className="ml-auto text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full font-semibold">
-          OE4 - Próximamente
-        </span>
+    <section className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-purple-50 p-6 shadow-lg">
+      <div className="mb-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">OE4</p>
+        <h3 className="text-lg font-bold text-gray-900">Descriptores de textura</h3>
       </div>
 
-      {/* Skeleton de matriz de textura */}
-      <div className="bg-white rounded-lg p-4 mb-4 animate-pulse">
-        <div className="h-4 w-56 bg-gray-200 rounded mb-3"></div>
-        <div className="grid grid-cols-4 gap-2">
-          {[...Array(16)].map((_, i) => (
-            <div
-              key={i}
-              className="h-12 bg-gradient-to-br from-purple-100 to-pink-100 rounded"
-              style={{
-                animationDelay: `${i * 0.05}s`,
-                opacity: 0.3 + (Math.random() * 0.7)
-              }}
-            ></div>
-          ))}
-        </div>
-      </div>
-
-      {/* Descriptores placeholder */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        {['Contraste', 'Homogeneidad', 'Entropía', 'Energía'].map((desc, i) => (
-          <div key={i} className="bg-white/70 backdrop-blur-sm rounded-lg p-2 animate-pulse">
-            <p className="text-xs text-gray-600 mb-1">{desc}</p>
-            <div className="h-5 w-16 bg-gray-300 rounded"></div>
+      {state.status === 'loading' && (
+        <div className="flex min-h-52 items-center justify-center rounded-xl border border-violet-100 bg-white/70" role="status">
+          <div className="text-center">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            <p className="text-sm font-medium text-violet-800">Calculando descriptores...</p>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      {/* Info */}
-      <div className="bg-purple-100 border border-purple-300 rounded-lg p-3">
-        <p className="text-xs text-purple-800">
-          <span className="font-semibold">🧠 Objetivo:</span> Evaluar descriptores de textura mediante filtrado
-          convolucional para caracterizar patrones en el cultivo (GLCM, LBP, etc.).
-        </p>
-      </div>
-    </div>
+      {state.status === 'empty' && (
+        <div className="min-h-52 rounded-xl border border-dashed border-violet-300 bg-white/70 p-6 text-center">
+          <p className="mt-10 font-semibold text-gray-800">Todavía no hay descriptores disponibles</p>
+          <p className="mt-2 text-sm text-gray-600">
+            {state.error ?? 'La textura se calcula después de segmentar la parcela.'}
+          </p>
+          <button className="mt-5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700" onClick={onRetry} type="button">Reintentar</button>
+        </div>
+      )}
+
+      {state.status === 'error' && (
+        <div className="min-h-52 rounded-xl border border-red-200 bg-red-50 p-6 text-center" role="alert">
+          <p className="mt-10 font-semibold text-red-900">No se pudo cargar la textura</p>
+          <p className="mt-2 text-sm text-red-700">{state.error}</p>
+          <button className="mt-5 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700" onClick={onRetry} type="button">Reintentar</button>
+        </div>
+      )}
+
+      {state.status === 'success' && descriptors && (
+        <div>
+          <TextureDescriptorsTable descriptors={descriptors} />
+          {descriptors[0] && (
+            <p className="mt-3 text-xs text-gray-500">Calculado el {formatCalculationDate(descriptors[0].calculation_date)}</p>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

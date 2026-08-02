@@ -4,8 +4,8 @@
  *
  * Contiene widgets de análisis:
  * - OE2: Evolución temporal NDVI
- * - OE3: (Futuro) Segmentación espacial
- * - OE4: (Futuro) Descriptores de textura
+ * - OE3: Segmentación espacial y comparación fenológica
+ * - OE4: Descriptores de textura
  */
 
 'use client';
@@ -15,9 +15,7 @@ import { useRouter } from 'next/navigation';
 import { usePolygons } from '@/app/context/PolygonContext';
 import { DateRangeProvider } from '@/app/context/DateRangeContext';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
-import NDVIEvolutionWidget from '@/app/components/organisms/NDVIEvolutionWidget';
-import SegmentationWidget from '@/app/components/organisms/SegmentationWidget';
-import TextureWidget from '@/app/components/organisms/TextureWidget';
+import ParcelAnalysisWidgets from '@/app/components/ParcelAnalysisWidgets';
 import DateRangeFilter from '@/app/components/molecules/DateRangeFilter';
 import { calculatePolygonArea, formatArea } from '@/app/utils/geoUtils';
 
@@ -132,39 +130,21 @@ export default function DashboardPage({ params }: DashboardPageProps) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl lg:text-2xl font-bold text-gray-900">Widgets de Análisis</h2>
-              <p className="text-sm text-gray-500 mt-1">Filtra el período temporal para todos los widgets</p>
+              <p className="mt-1 text-sm text-gray-500">
+                El período filtra NDVI, segmentación y textura; fenología usa el histórico completo
+              </p>
             </div>
             <DateRangeFilter />
           </div>
 
           {/* Grid 2 columnas en desktop, 1 en mobile */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Widget 1: Evolución Temporal NDVI (OE2) */}
-            <NDVIEvolutionWidget
+            {/* OE2, OE3 y OE4 comparten una única carga coordinada. */}
+            <ParcelAnalysisWidgets
               polygonId={polygon.id}
               polygonName={polygon.name}
               polygonCoordinates={polygon.coordinates}
             />
-
-            {/* Widget 2: Segmentación Espacial (OE3) */}
-            <SegmentationWidget />
-
-            {/* Widget 3: Descriptores de Textura (OE4) */}
-            <TextureWidget />
-
-            {/* Widget 4: Placeholder Comparación */}
-            <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 border-2 border-dashed border-orange-300">
-              <div className="text-center py-8">
-                <span className="text-5xl mb-4 block">📊</span>
-                <h3 className="text-lg font-bold text-gray-800 mb-2">Comparación Temporal</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Análisis multi-temporal · Próximamente
-                </p>
-                <span className="inline-block text-xs text-orange-700 bg-orange-100 px-3 py-1 rounded-full">
-                  En desarrollo
-                </span>
-              </div>
-            </div>
           </div>
         </div>
 

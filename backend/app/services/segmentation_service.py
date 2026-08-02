@@ -65,7 +65,7 @@ class SegmentationService:
             save_mask: Si True, guarda máscara binaria TIFF uint8
 
         Returns:
-            Dict con: id, acquisition_id, polygon_id, threshold_used,
+            Dict con: id, ndvi_result_id, acquisition_id, polygon_id, threshold_used,
                      total_pixels, cultivated_pixels, cultivated_percentage,
                      calculation_date, tiff_binary_mask, has_binary_mask
 
@@ -220,8 +220,8 @@ class SegmentationService:
         """
         Formatea resultado de segmentación para respuesta API.
 
-        NOTA: El contrato usa "acquisition_id" pero el modelo tiene "ndvi_result_id".
-        Se mapea correctamente aquí.
+        El contrato expone "ndvi_result_id" y conserva "acquisition_id" como
+        alias compatible para clientes existentes.
 
         Args:
             segmentation_result: Objeto SegmentationResult de la BD
@@ -231,7 +231,8 @@ class SegmentationService:
         """
         return {
             "id": segmentation_result.id,
-            "acquisition_id": segmentation_result.ndvi_result_id,  # Mapeo ndvi_result_id → acquisition_id
+            "ndvi_result_id": segmentation_result.ndvi_result_id,
+            "acquisition_id": segmentation_result.ndvi_result_id,  # Alias compatible
             "polygon_id": segmentation_result.polygon_id,
             "calculation_date": segmentation_result.calculation_date.isoformat(),
             "threshold_used": segmentation_result.threshold_used,

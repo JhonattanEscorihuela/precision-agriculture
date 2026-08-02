@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useSyncExternalStore } from 'react';
 
 export type DateRangeMode = 'relative' | 'absolute';
 
@@ -33,6 +33,28 @@ interface DateRangeContextType {
 }
 
 const DateRangeContext = createContext<DateRangeContextType | undefined>(undefined);
+
+const DEFAULT_RANGE: DateRange = {
+  mode: 'relative',
+  relative: '2m'
+};
+
+function readStoredRange(): DateRange {
+  if (typeof window === 'undefined') return DEFAULT_RANGE;
+
+  const stored = sessionStorage.getItem('dateRange');
+  if (!stored) return DEFAULT_RANGE;
+
+  try {
+    return JSON.parse(stored) as DateRange;
+  } catch {
+    return DEFAULT_RANGE;
+  }
+}
+
+const subscribeToHydration = () => () => undefined;
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
 
 /**
  * Calcula fecha de inicio según rango relativo.
@@ -93,24 +115,14 @@ function formatRelativeRange(relative: RelativeRange): string {
 }
 
 export function DateRangeProvider({ children }: { children: React.ReactNode }) {
-  // Default: últimos 2 meses (relativo)
-  const [range, setRangeState] = useState<DateRange>({
-    mode: 'relative',
-    relative: '2m'
-  });
+  const [storedRange, setRangeState] = useState<DateRange>(readStoredRange);
+  const isHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot
+  );
+  const range = isHydrated ? storedRange : DEFAULT_RANGE;
   const [isLoading, setIsLoading] = useState(false);
-
-  // Cargar desde sessionStorage al montar
-  useEffect(() => {
-    const stored = sessionStorage.getItem('dateRange');
-    if (stored) {
-      try {
-        setRangeState(JSON.parse(stored));
-      } catch (e) {
-        console.error('Error parsing stored date range:', e);
-      }
-    }
-  }, []);
 
   // Guardar en sessionStorage cuando cambia
   const setRange = (newRange: DateRange) => {

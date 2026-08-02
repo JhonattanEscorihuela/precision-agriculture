@@ -87,6 +87,7 @@ async def calculate_ndvi(
         polygon_id=result["polygon_id"],
         calculation_date=result["calculation_date"],
         stats=NDVIStatsResponse(
+            ndvi_result_id=result["ndvi_id"],
             acquisition_id=result["acquisition_id"],
             polygon_id=result["polygon_id"],
             acquisition_date=result["acquisition_date"],
@@ -153,6 +154,7 @@ async def get_ndvi_by_polygon(
     # Formatear respuestas
     return [
         NDVIStatsResponse(
+            ndvi_result_id=ndvi.id,
             acquisition_id=ndvi.acquisition_id,
             polygon_id=ndvi.polygon_id,
             acquisition_date=acq_date,  # Fecha de la imagen satelital
@@ -208,6 +210,7 @@ async def get_ndvi_stats(
     )
 
     return NDVIStatsResponse(
+        ndvi_result_id=result["ndvi_id"],
         acquisition_id=result["acquisition_id"],
         polygon_id=result["polygon_id"],
         acquisition_date=result["acquisition_date"],

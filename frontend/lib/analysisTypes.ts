@@ -1,0 +1,76 @@
+export type ResourceStatus = 'loading' | 'success' | 'empty' | 'error';
+
+export interface ResourceState<T> {
+  status: ResourceStatus;
+  data: T | null;
+  error: string | null;
+}
+
+export interface NDVISummary {
+  ndvi_result_id: number;
+  acquisition_id: number;
+  polygon_id: number;
+  acquisition_date: string;
+  calculation_date: string;
+  ndvi_mean: number;
+  ndvi_min: number;
+  ndvi_max: number;
+  ndvi_std: number;
+  ndvi_median?: number | null;
+  ndvi_p10?: number | null;
+  ndvi_p90?: number | null;
+  width: number;
+  height: number;
+}
+
+export interface SegmentationResult {
+  id: number;
+  ndvi_result_id: number;
+  acquisition_id: number;
+  polygon_id: number;
+  calculation_date: string;
+  threshold_used: number;
+  total_pixels: number;
+  cultivated_pixels: number;
+  cultivated_percentage: number;
+  tiff_binary_mask: string | null;
+  has_binary_mask: boolean;
+}
+
+export type TextureKernelType = 'edges' | 'homogeneity' | 'contrast';
+
+export interface TextureDescriptor {
+  id: number;
+  segmentation_result_id: number;
+  polygon_id: number;
+  kernel_type: TextureKernelType;
+  mean: number;
+  std: number;
+  min_val: number;
+  max_val: number;
+  std_normalized: number;
+  discriminative: boolean;
+  calculation_date: string;
+}
+
+export interface PhenologyCurvePoint {
+  date: string;
+  ndvi_parcel: number;
+  ndvi_reference: number;
+}
+
+export interface PhenologyComparison {
+  polygon_id: number;
+  reference_polygon_ids: number[];
+  dates_compared: number;
+  similarity_score: number;
+  classification: string;
+  curve_data: PhenologyCurvePoint[];
+}
+
+export interface UseParcelAnalysisResult {
+  segmentation: ResourceState<SegmentationResult>;
+  texture: ResourceState<TextureDescriptor[]>;
+  phenology: ResourceState<PhenologyComparison>;
+  retry: () => Promise<void>;
+}

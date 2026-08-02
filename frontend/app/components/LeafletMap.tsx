@@ -56,8 +56,11 @@ export default function LeafletMap() {
         map.addControl(drawControl);
 
         // Al crear un polígono en el mapa → enviar al backend
-        map.on(L.Draw.Event.CREATED, (ev: any) => {
-            const layer = ev.layer;
+        map.on(L.Draw.Event.CREATED, (event: L.LeafletEvent) => {
+            const { layer } = event as L.DrawEvents.Created;
+
+            if (!(layer instanceof L.Polygon)) return;
+
             drawnItems.addLayer(layer);
 
             // Leaflet devuelve coordenadas como [lat, lng]
