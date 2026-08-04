@@ -214,3 +214,36 @@ async def get_ndvi_by_id(
     except Exception as e:
         logger.error(f"❌ Error getting NDVI by ID: {str(e)}")
         raise
+
+
+async def update_overlay_cache(
+    db: AsyncSession,
+    ndvi_id: int,
+    overlay_png: bytes
+) -> bool:
+    """
+    Actualiza el campo overlay_png (caché) de un resultado NDVI.
+
+    Args:
+        db: Sesión async de base de datos
+        ndvi_id: ID del resultado NDVI
+        overlay_png: PNG en bytes para cachear
+
+    Returns:
+        True si se actualizó correctamente
+    """
+    try:
+        query = select(NDVIResult).where(NDVIResult.id == ndvi_id)
+        result = await db.execute(query)
+        ndvi_result = result.scalar_one_or_none()
+
+        if not ndvi_result:
+            return False
+
+        ndvi_result.overlay_png = overlay_png
+        await db.commit()
+        return True
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Error updating overlay cache: {str(e)}")
+        raise
