@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     SENTINEL_CLIENT_ID: str = ""  # Opcional: tiene default vacío para tests
     SENTINEL_CLIENT_SECRET: str = ""  # Opcional: tiene default vacío para tests
 
+    # CORS Origins
+    # Lista de orígenes permitidos separados por comas
+    # Ejemplo: "http://localhost:3000,https://app.example.com"
+    CORS_ORIGINS: str = "http://localhost:3000"
+
     class Config:
         env_file = ".env"
 

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
+import apiClient from '@/lib/axios';
 
 interface User {
   id: number;
@@ -60,49 +61,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isLoading = !isHydrated;
 
   const login = async (email: string, password: string) => {
-    const response = await fetch('http://localhost:8000/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
+    try {
+      const response = await apiClient.post('/auth/login', { email, password });
+      const data = response.data;
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Error al iniciar sesión');
+      setStoredAuth({ token: data.access_token, user: data.user });
+
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+
+      router.push('/');
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Error al iniciar sesión');
     }
-
-    const data = await response.json();
-
-    setStoredAuth({ token: data.access_token, user: data.user });
-
-    localStorage.setItem('token', data.access_token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-
-    router.push('/');
   };
 
   const register = async (email: string, fullName: string, password: string) => {
-    const response = await fetch('http://localhost:8000/auth/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    try {
+      await apiClient.post('/auth/register', {
         email,
         full_name: fullName,
         password
-      }),
-    });
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Error al registrarse');
+      // Auto-login después del registro
+      await login(email, password);
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Error al registrarse');
     }
-
-    // Auto-login después del registro
-    await login(email, password);
   };
 
   const logout = () => {

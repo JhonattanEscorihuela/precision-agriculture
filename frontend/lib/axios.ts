@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Configurar Axios con la base URL del backend
+// Configurar Axios con la base URL del backend (configurable via variable de entorno)
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8000', // URL del backend
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
   headers: {
     'Content-Type': 'application/json',
   },

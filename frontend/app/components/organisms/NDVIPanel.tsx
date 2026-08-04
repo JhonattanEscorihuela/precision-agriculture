@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
-import axios from 'axios';
+import apiClient from '@/lib/axios';
 import NDVIStats from '../molecules/NDVIStats';
 import NDVIColorScale from '../molecules/NDVIColorScale';
 
@@ -84,9 +84,8 @@ export default function NDVIPanel({ acquisitionId, onClose }: NDVIPanelProps) {
       }
 
       try {
-        const response = await axios.get<ExistingNDVIResponse>(
-          `http://localhost:8000/api/ndvi/${acquisitionId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const response = await apiClient.get<ExistingNDVIResponse>(
+          `/api/ndvi/${acquisitionId}`
         );
         const data = response.data;
         setNdviData({
@@ -144,12 +143,8 @@ export default function NDVIPanel({ acquisitionId, onClose }: NDVIPanelProps) {
     setError('');
 
     try {
-      const response = await axios.post<NDVIData>('http://localhost:8000/api/ndvi/calculate', {
+      const response = await apiClient.post<NDVIData>('/api/ndvi/calculate', {
         acquisition_id: acquisitionId
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
       });
 
       setNdviData({
@@ -176,13 +171,10 @@ export default function NDVIPanel({ acquisitionId, onClose }: NDVIPanelProps) {
     }
 
     try {
-      const response = await axios.get<Blob>(
-        `http://localhost:8000/api/ndvi/${acquisitionId}/tiff`,
+      const response = await apiClient.get<Blob>(
+        `/api/ndvi/${acquisitionId}/tiff`,
         {
-          responseType: 'blob',
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+          responseType: 'blob'
         }
       );
 

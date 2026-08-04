@@ -28,17 +28,17 @@ app = FastAPI()
 
 # Middleware de CORS
 # ⚠️ SEGURIDAD: Lista específica de orígenes permitidos (NO "*")
-# Agregar dominios de producción cuando sea necesario
+# Configurado via CORS_ORIGINS en .env (separados por comas)
+from app.core.config import settings as config_settings
+
+origins = [origin.strip() for origin in config_settings.CORS_ORIGINS.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",      # Frontend Next.js (dev)
-        "http://localhost:5173",      # Vite (alternative dev server)
-        # "https://tuapp.com",        # Producción (descomentar cuando esté listo)
-    ],
-    allow_credentials=True,            # Permite cookies/auth headers
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Incluir routers

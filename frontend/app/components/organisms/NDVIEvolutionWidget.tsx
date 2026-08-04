@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useDateRange } from '@/app/context/DateRangeContext';
-import axios from 'axios';
+import apiClient from '@/lib/axios';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import NDVIBadge from '../atoms/NDVIBadge';
 import { calculatePolygonArea, formatArea } from '@/app/utils/geoUtils';
@@ -95,10 +95,13 @@ export default function NDVIEvolutionWidget({
 
     try {
       // Usa BD como caché - solo retorna NDVIs ya calculados en el rango
-      const response = await axios.get<NDVIDataPoint[]>(
-        `http://localhost:8000/api/ndvi/polygon/${polygonId}?start_date=${selectedStartDate}&end_date=${selectedEndDate}`,
+      const response = await apiClient.get<NDVIDataPoint[]>(
+        `/api/ndvi/polygon/${polygonId}`,
         {
-          headers: { Authorization: `Bearer ${token}` }
+          params: {
+            start_date: selectedStartDate,
+            end_date: selectedEndDate
+          }
         }
       );
 
@@ -107,8 +110,15 @@ export default function NDVIEvolutionWidget({
 
       // Detectar fechas faltantes: consultar fechas disponibles en Sentinel
       try {
-        const availableResponse = await axios.get<AvailableDatesResponse>(
-          `http://localhost:8000/api/sentinel/available-dates/${polygonId}?start_date=${selectedStartDate}&end_date=${selectedEndDate}&max_cloud=20`
+        const availableResponse = await apiClient.get<AvailableDatesResponse>(
+          `/api/sentinel/available-dates/${polygonId}`,
+          {
+            params: {
+              start_date: selectedStartDate,
+              end_date: selectedEndDate,
+              max_cloud: 20
+            }
+          }
         );
         const availableDates = availableResponse.data.dates || [];
         const missing = availableDates.filter((date) => !date.ndvi_calculated).length;
@@ -128,8 +138,15 @@ export default function NDVIEvolutionWidget({
 
         // Verificar fechas disponibles
         try {
-          const availableResponse = await axios.get<AvailableDatesResponse>(
-            `http://localhost:8000/api/sentinel/available-dates/${polygonId}?start_date=${selectedStartDate}&end_date=${selectedEndDate}&max_cloud=20`
+          const availableResponse = await apiClient.get<AvailableDatesResponse>(
+            `/api/sentinel/available-dates/${polygonId}`,
+            {
+              params: {
+                start_date: selectedStartDate,
+                end_date: selectedEndDate,
+                max_cloud: 20
+              }
+            }
           );
           const availableDates = availableResponse.data.dates || [];
           setMissingDates(availableDates.length);
@@ -158,16 +175,13 @@ export default function NDVIEvolutionWidget({
     setGlobalLoading(true);
 
     try {
-      const response = await axios.post<BatchCalculationResponse>(
-        'http://localhost:8000/api/ndvi/calculate-batch',
+      const response = await apiClient.post<BatchCalculationResponse>(
+        '/api/ndvi/calculate-batch',
         {
           polygon_id: polygonId,
           start_date: selectedStartDate,
           end_date: selectedEndDate,
           max_cloud: 20
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
         }
       );
 

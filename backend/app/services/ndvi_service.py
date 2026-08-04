@@ -224,8 +224,13 @@ class NDVIService:
         """
         Calcula estadísticos NDVI sobre píxeles válidos.
 
-        IMPORTANTE: ndvi_mean se calcula como NDVI(mean(B04), mean(B08)),
-        no como mean(NDVI[pixels]). Esta es la metodología de Copernicus.
+        ndvi_mean se calcula como NDVI(mean(B04), mean(B08)):
+        - Método validado contra Copernicus Browser (diff 3.5%)
+        - Coincide con metodología oficial de Copernicus
+        - Documentado en OE2_PARA_REPORTE_WORD.md
+
+        ndvi_std, ndvi_min, ndvi_max se calculan sobre el
+        array NDVI pixel-wise filtrado por valid_mask.
 
         Args:
             ndvi: Array NDVI pixel-wise (puede contener NaN)
@@ -246,9 +251,12 @@ class NDVIService:
         if len(valid_pixels) == 0:
             raise ValueError("No valid pixels to calculate NDVI statistics")
 
-        logger.debug(f"📊 Píxeles válidos: {len(valid_pixels)} / {ndvi.size} ({100*len(valid_pixels)/ndvi.size:.1f}%)")
+        logger.debug(
+            f"📊 Píxeles válidos: {len(valid_pixels)} / {ndvi.size} "
+            f"({100*len(valid_pixels)/ndvi.size:.1f}%)"
+        )
 
-        # Calcular ndvi_mean como NDVI de las reflectancias medias (metodología Copernicus)
+        # ndvi_mean: NDVI de reflectancias medias (metodología Copernicus)
         with rasterio.open(io.BytesIO(b04_bytes)) as src:
             b04_array = src.read(1).astype(np.float32)
         with rasterio.open(io.BytesIO(b08_bytes)) as src:
@@ -256,10 +264,9 @@ class NDVIService:
 
         b04_mean = b04_array[~nodata_mask].mean()
         b08_mean = b08_array[~nodata_mask].mean()
-        ndvi_mean_correct = (b08_mean - b04_mean) / (b08_mean + b04_mean)
 
         return {
-            "ndvi_mean": float(ndvi_mean_correct),  # NDVI de means (Copernicus)
+            "ndvi_mean": float((b08_mean - b04_mean) / (b08_mean + b04_mean)),
             "ndvi_min": float(np.min(valid_pixels)),
             "ndvi_max": float(np.max(valid_pixels)),
             "ndvi_std": float(np.std(valid_pixels))

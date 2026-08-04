@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
-import axios from 'axios';
+import apiClient from '@/lib/axios';
 
 interface PolygonHealth {
   [polygonId: number]: {
@@ -41,11 +41,8 @@ export function usePolygonHealth(polygonIds: number[]) {
       // Consultar último NDVI de cada parcela
       for (const polygonId of polygonIds) {
         try {
-          const response = await axios.get(
-            `http://localhost:8000/api/ndvi/polygon/${polygonId}?limit=1`,
-            {
-              headers: { Authorization: `Bearer ${token}` }
-            }
+          const response = await apiClient.get(
+            `/api/ndvi/polygon/${polygonId}?limit=1`
           );
 
           if (response.data && response.data.length > 0) {

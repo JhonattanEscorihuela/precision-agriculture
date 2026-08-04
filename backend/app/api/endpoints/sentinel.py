@@ -24,9 +24,12 @@ from app.schemas.sentinel import (
 )
 from app.schemas.sentinel_test import SentinelTestRequest
 from app.crud.polygon import get_polygon_by_id
+from app.core.security import get_current_user
 
 
-router = APIRouter()
+# ⚠️ SEGURIDAD: Router protegido con JWT
+# Todos los endpoints requieren autenticación para prevenir abuso de cuota Copernicus
+router = APIRouter(dependencies=[Depends(get_current_user)])
 logger = logging.getLogger(__name__)
 
 
@@ -293,6 +296,8 @@ async def test_sentinel_download(request: SentinelTestRequest):
     """
     🧪 Endpoint de prueba para verificar que Sentinel-2 funciona correctamente.
 
+    ⚠️ SOLO DISPONIBLE EN DEVELOPMENT - Bloqueado en producción por seguridad.
+
     Usa coordenadas hardcodeadas de Parcela 211 del SRRG, Calabozo, Guárico, Venezuela.
     No requiere polygon_id de la base de datos.
 
@@ -321,6 +326,13 @@ async def test_sentinel_download(request: SentinelTestRequest):
 
     Retorna el archivo descargado (TIFF o PNG según el tipo).
     """
+    # 🔒 GUARD: Solo en desarrollo
+    import os
+    if os.getenv("ENVIRONMENT", "development") != "development":
+        raise HTTPException(
+            status_code=403,
+            detail="Test endpoint only available in development environment"
+        )
     # PARCELA_211 — SRRG, Calabozo, Guárico, Venezuela
     # Período 2024-2025 (parcela principal de referencia)
     TEST_COORDINATES = [

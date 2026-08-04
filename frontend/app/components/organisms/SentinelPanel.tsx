@@ -5,6 +5,7 @@ import Link from 'next/link';
 import DateSelector from '../molecules/DateSelector';
 import AcquireButton from '../molecules/AcquireButton';
 import NDVIPanel from './NDVIPanel';
+import apiClient from '@/lib/axios';
 
 interface DateInfo {
   date: string;
@@ -114,17 +115,18 @@ export default function SentinelPanel({
     }
 
     try {
-      const url = `http://localhost:8000/api/sentinel/available-dates/${polygonId}?start_date=${startDate}&end_date=${endDate}&max_cloud=20`;
+      const response = await apiClient.get(
+        `/api/sentinel/available-dates/${polygonId}`,
+        {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+            max_cloud: 20
+          }
+        }
+      );
 
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error('Error al consultar fechas');
-      }
-
-      const data = await response.json();
-      setDates(data.dates || []);
+      setDates(response.data.dates || []);
     } catch (error) {
       setDates([]);
       setErrorMessage('Error al consultar fechas disponibles');
@@ -147,21 +149,9 @@ export default function SentinelPanel({
         date: selectedDate,
       };
 
+      const response = await apiClient.post('/api/sentinel/acquire', requestPayload);
 
-      const response = await fetch('http://localhost:8000/api/sentinel/acquire', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestPayload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al adquirir imagen');
-      }
-
-      const data = await response.json();
+      const data = response.data;
 
       setAcquisitionSuccess(true);
 
