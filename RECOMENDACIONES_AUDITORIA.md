@@ -454,3 +454,163 @@ No se recomienda agregar nuevas funcionalidades hasta completar, como mínimo:
 5. Rediseño de las referencias fenológicas.
 
 Esos puntos afectan directamente la seguridad, la conservación de datos y la validez de los resultados mostrados al usuario.
+
+---
+
+# RESOLUCIÓN DE RECOMENDACIONES — 2025-06-XX
+
+## ✅ RESUELTOS
+
+### P0.1 — Autenticación Sentinel
+**Estado:** RESUELTO
+**Qué se hizo:** Se agregó `dependencies=[Depends(get_current_user)]`
+al router de Sentinel. Todos los endpoints ahora requieren JWT.
+**Archivo:** `backend/app/api/endpoints/sentinel.py`
+
+### P0.1 — Endpoint /test protegido
+**Estado:** RESUELTO
+**Qué se hizo:** Guard que bloquea el endpoint si
+`ENVIRONMENT != "development"`. Retorna 403 en producción.
+**Archivo:** `backend/app/api/endpoints/sentinel.py`
+
+### P2.12 — URLs hardcodeadas frontend
+**Estado:** RESUELTO
+**Qué se hizo:** Se creó `NEXT_PUBLIC_API_URL` en `.env.local`.
+Se migraron las 13 ocurrencias de `http://localhost:8000` a
+usar `apiClient` con baseURL configurable.
+**Archivos:** `frontend/lib/axios.ts`, `frontend/.env.local`,
+múltiples componentes migrados a apiClient.
+**Verificación:** `grep -r "localhost:8000" frontend/` retorna
+0 resultados (solo el fallback en axios.ts).
+
+### P1.9 — NDVI mean "incorrecto"
+**Estado:** INVESTIGADO Y DESCARTADO
+**Por qué no se cambió:** El método actual
+`NDVI(mean(B04), mean(B08))` fue validado empíricamente
+contra Copernicus Browser con 3.5% de diferencia promedio
+(4 fechas, todas dentro de tolerancia ±5%). Ver evidencia
+en `OE2_PARA_REPORTE_WORD.md`, Tabla 2.
+Al cambiar al método `mean(NDVI_por_pixel)`, los valores
+cayeron a la mitad (~0.36 vs 0.70) debido a píxeles de
+borde/nodata incluidos en el promedio.
+**Conclusión:** El método actual es correcto para nuestro
+contexto y coincide con la metodología de Copernicus.
+
+### P3 — Docker producción
+**Estado:** RESUELTO
+**Qué se hizo:**
+- `docker-compose.prod.yml` con Nginx reverse proxy
+- `frontend/Dockerfile.prod` con build standalone multi-stage
+- `nginx/nginx.conf` con routing /api→backend, /→frontend
+- `.env.production.example` con template de variables
+- `next.config.ts` con `output: 'standalone'`
+**Archivos nuevos:** `docker-compose.prod.yml`,
+`frontend/Dockerfile.prod`, `nginx/nginx.conf`,
+`.env.production.example`
+
+### P0.5 — Secretos
+**Estado:** RESUELTO
+**Qué se hizo:** `.gitignore` cubre `*.env`. Se crearon
+`.env.example` (backend y frontend) como templates sin
+secretos reales. Variables sensibles solo en `.env` local.
+
+---
+
+## ⏳ NO RESUELTOS (con justificación)
+
+### P0.2 — Máscaras de nubes (dataMask, SCL, CLM)
+**Estado:** NO IMPLEMENTADO
+**Por qué:** Requiere cambiar los evalscripts de Sentinel
+Hub y re-procesar todas las adquisiciones existentes.
+Impacto alto en datos ya calculados. Se documenta como
+LIMITACIÓN en la tesis.
+**Plan futuro:** Implementar en siguiente iteración si
+hay tiempo antes de defensa.
+
+### P0.3 — Integridad PostgreSQL (FK, huérfanos)
+**Estado:** NO IMPLEMENTADO
+**Por qué:** Requiere Alembic migrations + limpieza de
+datos existentes. Riesgo de romper datos de prueba actuales.
+**Plan futuro:** Implementar con Alembic antes del
+despliegue final en AWS.
+
+### P0.4 — NDVI batch (MissingGreenlet)
+**Estado:** NO IMPLEMENTADO
+**Por qué:** El endpoint individual funciona correctamente.
+El batch es una optimización no crítica para la demo.
+El frontend usa llamadas individuales que funcionan.
+**Plan futuro:** Corregir session factory si se necesita
+procesamiento masivo.
+
+### P1.7 — Fenología con IDs hardcodeados
+**Estado:** NO IMPLEMENTADO (parcialmente funcional)
+**Por qué:** Los IDs [1,2,3] existen actualmente en BD
+y el endpoint funciona. El problema aparecería si se
+borran esas parcelas. Se necesita rediseñar con tabla
+`reference_parcels` dedicada.
+**Plan futuro:** Crear tabla de referencia antes de
+despliegue AWS.
+
+### P1.10 — Área geográfica (Shoelace)
+**Estado:** NO IMPLEMENTADO
+**Por qué:** No es crítico para la demo. Los polígonos
+se visualizan correctamente en el mapa. El cálculo de
+área no se muestra prominentemente en la UI.
+**Plan futuro:** Usar pyproj Geod para cálculo preciso.
+
+### P1.6 — Logs con datos sensibles
+**Estado:** NO IMPLEMENTADO
+**Por qué:** En desarrollo local no es un riesgo. Se
+implementará antes del despliegue en AWS.
+**Plan futuro:** Filtrar PII y tokens antes de AWS.
+
+### P2.13-16 — Issues frontend
+**Estado:** PENDIENTE PARA FRONTEND
+**Responsable:** Compañera
+**Items:**
+- Token 30 días en localStorage (aceptable para tesis)
+- Componentes >200 líneas (refactorizar si hay tiempo)
+- Errores no propagados (mejorar UX)
+- Accesibilidad (ARIA attrs)
+
+### P2.17 — BLOBs en PostgreSQL
+**Estado:** NO IMPLEMENTADO
+**Por qué:** Para el volumen de datos de la tesis
+(~33 imágenes × 260KB = 8.6MB), PostgreSQL es suficiente.
+Object storage es over-engineering para este caso.
+**Plan futuro:** Solo si se escala a muchos usuarios.
+
+### P2.18 — Cálculos bloqueantes en event loop
+**Estado:** NO IMPLEMENTADO
+**Por qué:** Los cálculos (NDVI, textura) tardan 3-5
+segundos. Con un solo usuario (demo de tesis), no hay
+problema de concurrencia.
+**Plan futuro:** Celery/asyncio task queue si se escala.
+
+### P3.19-23 — Tests, CI/CD, backups
+**Estado:** NO IMPLEMENTADO
+**Por qué:** Scope de tesis. Tests existentes de OE2
+pasan (16/16). CI/CD y backups son para producción real.
+
+---
+
+## 📊 RESUMEN
+
+| Categoría | Total | Resueltos | No resueltos | % |
+|-----------|-------|-----------|--------------|---|
+| P0 (Críticos) | 5 | 2 | 3 | 40% |
+| P1 (Alta) | 6 | 1* | 5 | 17% |
+| P2 (Arquitectura) | 7 | 1 | 6 | 14% |
+| P3 (Despliegue) | 5 | 1 | 4 | 20% |
+| **TOTAL** | **23** | **5** | **18** | **22%** |
+
+*P1.9 investigado y descartado (no era un error)
+
+**Justificación general:** Este es un proyecto de TESIS
+con scope limitado. Se priorizaron los cambios que:
+1. Afectan el despliegue en AWS (CORS, env vars, Docker)
+2. Afectan la seguridad mínima (auth Sentinel)
+3. Fueron necesarios para correctitud científica (NDVI)
+
+Los items no resueltos están documentados como
+LIMITACIONES o TRABAJO FUTURO en el documento de tesis.
