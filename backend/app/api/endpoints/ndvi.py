@@ -271,3 +271,133 @@ async def download_ndvi_tiff(
             "Content-Disposition": f"attachment; filename=ndvi_acquisition_{acquisition_id}.tif"
         }
     )
+
+
+@router.get(
+    "/{acquisition_id}/overlay",
+    responses={
+        200: {
+            "description": "PNG coloreado con bounds para visualización en mapa",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "image_base64": "data:image/png;base64,iVBORw0KG...",
+                        "bounds": [[8.838, -67.528], [8.853, -67.515]],
+                        "cached": True,
+                        "metadata": {
+                            "date": "2026-03-22",
+                            "polygon_id": 10,
+                            "thresholds": {"critical": 0.3, "alert": 0.5}
+                        }
+                    }
+                }
+            }
+        },
+        404: {"model": NDVIErrorResponse, "description": "NDVI not calculated yet"},
+        403: {"model": NDVIErrorResponse, "description": "Access denied"}
+    }
+)
+async def get_ndvi_overlay(
+    acquisition_id: int,
+    force: bool = False,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Genera overlay coloreado del NDVI para visualización en mapa Leaflet.
+
+    **Workflow:**
+    1. Busca NDVIResult por acquisition_id
+    2. Verifica ownership del polígono
+    3. Si existe cache (overlay_png) y no force → retorna desde caché
+    4. Si no existe cache o force=true:
+       - Genera PNG coloreado RGBA desde TIFF NDVI
+       - Paleta: Verde (≥0.5) / Amarillo (0.3-0.5) / Rojo (<0.3)
+       - Guarda en cache (campo overlay_png)
+    5. Retorna base64 + bounds + metadata
+
+    **Cache policy:**
+    - Primera llamada: calcula y guarda (cached=false)
+    - Siguientes llamadas: sirve desde cache (cached=true)
+    - Query param ?force=true: recalcula y actualiza cache
+
+    Args:
+        acquisition_id: ID de la adquisición
+        force: Forzar recálculo aunque exista caché (default: False)
+        db: Sesión de base de datos
+        current_user: Usuario autenticado (JWT)
+
+    Returns:
+        JSON con image_base64, bounds, cached flag y metadata
+
+    Raises:
+        HTTPException 404: Si no existe NDVI calculado
+        HTTPException 403: Si no tiene acceso
+        HTTPException 500: Si hay error generando overlay
+    """
+    import base64
+    from app.services.ndvi_overlay_service import generate_ndvi_overlay
+    from app.models.acquisition import SentinelAcquisition
+
+    try:
+        # 1. Buscar NDVIResult
+        ndvi_result = await crud_ndvi.get_ndvi_by_acquisition(db, acquisition_id)
+        if not ndvi_result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"NDVI not calculated for acquisition_id={acquisition_id}"
+            )
+
+        # 2. Verificar ownership del polígono
+        polygon = await crud_polygon.get_polygon_by_id(db, ndvi_result.polygon_id)
+        if not polygon or polygon.user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have access to this NDVI result"
+            )
+
+        # 3. Obtener fecha de adquisición
+        from sqlalchemy import select
+        query = select(SentinelAcquisition.acquisition_date).where(
+            SentinelAcquisition.id == acquisition_id
+        )
+        result = await db.execute(query)
+        acquisition_date = result.scalar_one_or_none()
+
+        # 4. Cache check
+        if ndvi_result.overlay_png and not force:
+            # Servir desde caché
+            png_bytes = ndvi_result.overlay_png
+            # Re-generar bounds desde el TIFF (no se cachean separadamente)
+            _, leaflet_bounds = generate_ndvi_overlay(ndvi_result.ndvi_tiff)
+            cached = True
+        else:
+            # 5. Generar overlay
+            png_bytes, leaflet_bounds = generate_ndvi_overlay(ndvi_result.ndvi_tiff)
+
+            # 6. Guardar en cache
+            await crud_ndvi.update_overlay_cache(db, ndvi_result.id, png_bytes)
+            cached = False
+
+        # 7. Codificar a base64
+        image_b64 = f"data:image/png;base64,{base64.b64encode(png_bytes).decode()}"
+
+        # 8. Respuesta
+        return {
+            "image_base64": image_b64,
+            "bounds": leaflet_bounds,
+            "cached": cached,
+            "metadata": {
+                "date": str(acquisition_date) if acquisition_date else None,
+                "polygon_id": ndvi_result.polygon_id,
+                "thresholds": {"critical": 0.3, "alert": 0.5}
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating NDVI overlay: {str(e)}"
+        )

@@ -66,6 +66,12 @@ class NDVIResult(NDVIResultBase, table=True):
     # Raster NDVI completo en formato TIFF float32
     ndvi_tiff: bytes = Field(description="Raster NDVI en formato TIFF float32 con compresión LZW")
 
+    # Overlay coloreado en caché (PNG base64)
+    overlay_png: Optional[bytes] = Field(
+        default=None,
+        description="PNG coloreado RGBA del NDVI para visualización (caché)"
+    )
+
     # Timestamps
     calculation_date: datetime = Field(
         sa_column=Column(DateTime),
