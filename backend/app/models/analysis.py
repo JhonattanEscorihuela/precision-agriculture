@@ -121,3 +121,32 @@ class NDVIResultPublic(NDVIResultBase):
     calculation_date: datetime
     created_at: datetime
     tiff_size_kb: float = Field(description="Tamaño del TIFF NDVI en KB")
+
+
+class TextureOverlayCache(SQLModel, table=True):
+    """
+    Caché de overlays PNG coloreados de textura.
+    Un registro por (ndvi_result_id, kernel).
+    """
+    __tablename__ = "texture_overlay_cache"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    ndvi_result_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("ndvi_results.id", ondelete="CASCADE")),
+        description="ID del resultado NDVI usado como base"
+    )
+    kernel: str = Field(
+        description="Nombre del kernel aplicado (contrast/edges/homogeneity)",
+        max_length=20
+    )
+    overlay_png: bytes = Field(
+        description="PNG coloreado RGBA del resultado de textura"
+    )
+    interpretation: str = Field(
+        description="Texto interpretativo generado según kernel y valores"
+    )
+    created_at: Optional[datetime] = Field(
+        sa_column=Column(DateTime),
+        default_factory=datetime.utcnow,
+        description="Timestamp de creación del caché"
+    )

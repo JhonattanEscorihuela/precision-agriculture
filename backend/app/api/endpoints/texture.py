@@ -131,3 +131,175 @@ async def get_texture_by_segmentation(
     )
 
     return descriptors
+
+
+@router.get(
+    "/overlay/{ndvi_result_id}",
+    responses={
+        200: {
+            "description": "PNG coloreado de textura con bounds para visualización en mapa",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "image_base64": "data:image/png;base64,iVBORw0KG...",
+                        "bounds": [[8.838, -67.528], [8.853, -67.515]],
+                        "kernel": "contrast",
+                        "cached": True,
+                        "interpretation": "Campo heterogéneo — se detectan...",
+                        "metadata": {
+                            "date": "2026-03-22",
+                            "polygon_id": 10,
+                            "thresholds_percentiles": [33, 66]
+                        }
+                    }
+                }
+            }
+        },
+        404: {"model": TextureErrorResponse, "description": "NDVI result not found"},
+        403: {"model": TextureErrorResponse, "description": "Access denied"},
+        400: {"model": TextureErrorResponse, "description": "Invalid kernel name"}
+    }
+)
+async def get_texture_overlay(
+    ndvi_result_id: int,
+    kernel: str = "contrast",
+    force: bool = False,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Genera overlay coloreado de textura para visualización en mapa Leaflet.
+
+    **Workflow:**
+    1. Busca NDVIResult por ndvi_result_id
+    2. Verifica ownership del polígono
+    3. Si existe cache (texture_overlay_cache) y no force → retorna desde caché
+    4. Si no existe cache o force=true:
+       - Aplica kernel de textura al TIFF NDVI
+       - Genera PNG coloreado RGBA con paleta percentil
+       - Genera interpretación textual según kernel y valores
+       - Guarda en cache (tabla texture_overlay_cache)
+    5. Retorna base64 + bounds + metadata + interpretation
+
+    **Cache policy:**
+    - Primera llamada: calcula y guarda (cached=false)
+    - Siguientes llamadas: sirve desde cache (cached=true)
+    - Query param ?force=true: recalcula y actualiza cache
+
+    **Kernels disponibles:**
+    - **contrast**: Magnitud del gradiente (Sobel) — detecta variabilidad local
+    - **edges**: Laplaciano — detecta bordes internos y transiciones
+    - **homogeneity**: Diferencia con media local — cuantifica uniformidad
+
+    **Paleta de colores (variabilidad frío/cálido):**
+    - Azul (#3b82f6): Percentil 0-33 (Uniforme)
+    - Púrpura (#8b5cf6): Percentil 33-66 (Moderado)
+    - Naranja (#f97316): Percentil 66-100 (Heterogéneo)
+
+    Args:
+        ndvi_result_id: ID del resultado NDVI
+        kernel: Nombre del kernel (contrast/edges/homogeneity)
+        force: Forzar recálculo aunque exista caché (default: False)
+        db: Sesión de base de datos
+        current_user: Usuario autenticado (JWT)
+
+    Returns:
+        JSON con image_base64, bounds, kernel, cached, interpretation y metadata
+
+    Raises:
+        HTTPException 404: Si no existe NDVI result
+        HTTPException 403: Si no tiene acceso
+        HTTPException 400: Si kernel inválido
+        HTTPException 500: Si hay error generando overlay
+    """
+    import base64
+    from app.services.texture_overlay_service import generate_texture_overlay
+    from app.crud import texture_overlay as crud_overlay
+    from app.crud import ndvi as crud_ndvi
+    from app.crud import polygon as crud_polygon
+    from app.models.acquisition import SentinelAcquisition
+    from sqlalchemy import select
+
+    # Validar kernel
+    valid_kernels = ["contrast", "edges", "homogeneity"]
+    if kernel not in valid_kernels:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid kernel '{kernel}'. Must be one of: {', '.join(valid_kernels)}"
+        )
+
+    try:
+        # 1. Buscar NDVIResult
+        ndvi_result = await crud_ndvi.get_ndvi_by_id(db, ndvi_result_id)
+        if not ndvi_result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"NDVI result not found with id={ndvi_result_id}"
+            )
+
+        # 2. Verificar ownership del polígono
+        polygon = await crud_polygon.get_polygon_by_id(db, ndvi_result.polygon_id)
+        if not polygon or polygon.user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have access to this NDVI result"
+            )
+
+        # 3. Obtener fecha de adquisición
+        query = select(SentinelAcquisition.acquisition_date).where(
+            SentinelAcquisition.id == ndvi_result.acquisition_id
+        )
+        result = await db.execute(query)
+        acquisition_date = result.scalar_one_or_none()
+
+        # 4. Cache check
+        cached_overlay = await crud_overlay.get_cached_overlay(db, ndvi_result_id, kernel)
+
+        if cached_overlay and not force:
+            # Servir desde caché
+            png_bytes = cached_overlay.overlay_png
+            interpretation = cached_overlay.interpretation
+            # Re-generar bounds desde el TIFF
+            _, leaflet_bounds, _ = generate_texture_overlay(ndvi_result.ndvi_tiff, kernel)
+            cached = True
+        else:
+            # 5. Generar overlay
+            png_bytes, leaflet_bounds, interpretation = generate_texture_overlay(
+                ndvi_result.ndvi_tiff, kernel
+            )
+
+            # 6. Guardar en cache (crea o actualiza)
+            await crud_overlay.save_overlay_cache(
+                db, ndvi_result_id, kernel, png_bytes, interpretation
+            )
+            cached = False
+
+        # 7. Codificar a base64
+        image_b64 = f"data:image/png;base64,{base64.b64encode(png_bytes).decode()}"
+
+        # 8. Respuesta
+        return {
+            "image_base64": image_b64,
+            "bounds": leaflet_bounds,
+            "kernel": kernel,
+            "cached": cached,
+            "interpretation": interpretation,
+            "metadata": {
+                "date": str(acquisition_date) if acquisition_date else None,
+                "polygon_id": ndvi_result.polygon_id,
+                "thresholds_percentiles": [33, 66]
+            }
+        }
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error generating texture overlay: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating texture overlay: {str(e)}"
+        )
