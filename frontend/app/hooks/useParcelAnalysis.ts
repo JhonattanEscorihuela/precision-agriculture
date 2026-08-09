@@ -59,19 +59,8 @@ function getPhenologyEmptyMessage(error: unknown): string {
     ? error.response?.data?.detail
     : undefined;
 
-  if (detail?.includes('Cannot compare reference parcel')) {
-    return 'Esta parcela forma parte de la referencia de arroz y no puede compararse consigo misma.';
-  }
-
   if (detail?.includes('No NDVI data')) {
     return 'No hay resultados NDVI suficientes para comparar esta parcela.';
-  }
-
-  if (detail?.includes('Insufficient common dates')) {
-    const foundDates = detail.match(/found\s+(\d+)/i)?.[1];
-    return foundDates
-      ? `Se necesitan al menos 5 fechas coincidentes; actualmente hay ${foundDates}.`
-      : 'Se necesitan al menos 5 fechas coincidentes para la comparación fenológica.';
   }
 
   return detail || 'No hay datos suficientes para realizar la comparación fenológica.';
@@ -125,6 +114,7 @@ export function useParcelAnalysis(polygonId: number): UseParcelAnalysisResult {
   const endDate = formatApiDate(getEndDate());
   const requestVersion = useRef(0);
 
+  const [latestNDVI, setLatestNDVI] = useState<ResourceState<NDVISummary>>(loadingState);
   const [segmentation, setSegmentation] = useState<ResourceState<SegmentationResult>>(
     loadingState
   );
@@ -142,6 +132,7 @@ export function useParcelAnalysis(polygonId: number): UseParcelAnalysisResult {
     } catch (error: unknown) {
       if (requestVersion.current !== version) return;
       const message = getErrorMessage(error, 'No se pudo consultar el NDVI de la parcela.');
+      setLatestNDVI(errorState(message));
       setSegmentation(errorState(message));
       setTexture(errorState(message));
       return;
@@ -150,10 +141,14 @@ export function useParcelAnalysis(polygonId: number): UseParcelAnalysisResult {
     if (!latestNDVI) {
       if (requestVersion.current !== version) return;
       const message = 'No hay resultados NDVI en el periodo seleccionado.';
+      setLatestNDVI(emptyState(message));
       setSegmentation(emptyState(message));
       setTexture(emptyState(message));
       return;
     }
+
+    if (requestVersion.current !== version) return;
+    setLatestNDVI(successState(latestNDVI));
 
     let segmentationResult: SegmentationResult;
 
@@ -211,9 +206,11 @@ export function useParcelAnalysis(polygonId: number): UseParcelAnalysisResult {
     setSegmentation(loadingState());
     setTexture(loadingState());
     setPhenology(loadingState());
+    setLatestNDVI(loadingState());
 
     if (!token) {
       const message = 'Debes iniciar sesión para consultar los análisis.';
+      setLatestNDVI(errorState(message));
       setSegmentation(errorState(message));
       setTexture(errorState(message));
       setPhenology(errorState(message));
@@ -242,5 +239,5 @@ export function useParcelAnalysis(polygonId: number): UseParcelAnalysisResult {
     };
   }, [isAuthLoading, retry]);
 
-  return { segmentation, texture, phenology, retry };
+  return { latestNDVI, segmentation, texture, phenology, retry };
 }

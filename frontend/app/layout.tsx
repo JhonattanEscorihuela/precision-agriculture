@@ -4,6 +4,7 @@ import "@/app/styles/globals.css";
 import Sidebar from "@/app/components/SideBar";
 import { PolygonProvider } from "./context/PolygonContext";
 import { AuthProvider } from "./context/AuthContext";
+import { OverlayProvider } from "./context/OverlayContext";
 import { usePathname } from "next/navigation";
 
 export default function RootLayout({
@@ -18,7 +19,8 @@ export default function RootLayout({
     <html lang="es">
       <body className="m-0 p-0 overflow-x-hidden">
         <AuthProvider>
-          <PolygonProvider>
+          <OverlayProvider>
+            <PolygonProvider>
             {isAuthPage ? (
               // Sin sidebar en páginas de auth
               children
@@ -34,7 +36,8 @@ export default function RootLayout({
                 </main>
               </div>
             )}
-          </PolygonProvider>
+            </PolygonProvider>
+          </OverlayProvider>
         </AuthProvider>
       </body>
     </html>

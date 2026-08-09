@@ -19,6 +19,7 @@ interface SentinelPanelProps {
   polygonName: string;
   isOpen: boolean;
   onClose: () => void;
+  onAnalysisUpdated?: () => void;
 }
 
 /**
@@ -29,7 +30,8 @@ export default function SentinelPanel({
   polygonId,
   polygonName,
   isOpen,
-  onClose
+  onClose,
+  onAnalysisUpdated,
 }: SentinelPanelProps) {
   // Calcular fechas inteligentes
   const getSmartDates = () => {
@@ -127,7 +129,7 @@ export default function SentinelPanel({
       );
 
       setDates(response.data.dates || []);
-    } catch (error) {
+    } catch {
       setDates([]);
       setErrorMessage('Error al consultar fechas disponibles');
     } finally {
@@ -186,14 +188,14 @@ export default function SentinelPanel({
 
       {/* Panel lateral (desktop) / Modal inferior (mobile) */}
       <div className="
-        fixed bg-white shadow-2xl flex flex-col
+        fixed z-[1000] bg-white shadow-2xl flex flex-col
 
         /* Mobile: modal inferior */
         bottom-0 left-0 right-0 max-h-[85vh] rounded-t-3xl
 
         /* Desktop: panel lateral */
         lg:right-0 lg:left-auto lg:top-0 lg:bottom-auto lg:h-full lg:w-96 lg:rounded-none lg:max-h-none
-      " style={{ zIndex: 1000 }}>
+      ">
         {/* Handle para arrastrar en mobile */}
         <div className="lg:hidden flex justify-center py-3 border-b border-gray-200">
           <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
@@ -293,6 +295,7 @@ export default function SentinelPanel({
               <NDVIPanel
                 acquisitionId={lastAcquisitionId}
                 polygonId={polygonId}
+                onCalculated={onAnalysisUpdated}
               />
             </div>
           )}

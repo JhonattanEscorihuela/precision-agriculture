@@ -8,11 +8,19 @@ import 'leaflet-draw';
 import { usePolygons } from '@/app/context/PolygonContext';
 import { leafletToGeoJSON, geoJSONToLeaflet, closePolygon } from '@/app/utils/coordUtils';
 import SentinelPanel from './organisms/SentinelPanel';
+import MapOverlayControls from './molecules/MapOverlayControls';
+import { useOverlay } from '@/app/context/OverlayContext';
+import useMapAnalysisOverlays from '@/app/hooks/useMapAnalysisOverlays';
+import type { OverlayMode } from '@/lib/overlayTypes';
 
 export default function LeafletMap() {
     const { polygons, fetchPolygons, createPolygon } = usePolygons();
     const mapRef = React.useRef<L.Map>(null);
     const drawnItemsRef = React.useRef<L.FeatureGroup>(null);
+    const polygonLayersRef = React.useRef<Map<number, L.Polygon>>(new Map());
+    const [overlayMode, setOverlayMode] = useState<OverlayMode>('none');
+    const [overlayRefreshVersion, setOverlayRefreshVersion] = useState(0);
+    const { textureKernel, setTextureKernel } = useOverlay();
 
     // Estado para el panel de Sentinel
     const [selectedPolygon, setSelectedPolygon] = useState<{ id: number; name: string } | null>(null);
@@ -94,6 +102,7 @@ export default function LeafletMap() {
     useEffect(() => {
         if (!mapRef.current || !drawnItemsRef.current) return;
         drawnItemsRef.current.clearLayers();
+        polygonLayersRef.current.clear();
 
         polygons.forEach((poly) => {
             // Backend devuelve coordenadas en formato GeoJSON [lng, lat]
@@ -104,7 +113,7 @@ export default function LeafletMap() {
                 color: '#3388ff',
                 weight: 2,
                 fillColor: '#3388ff',
-                fillOpacity: 0.4,
+                fillOpacity: 0,
             });
 
             // Al hacer click en el polígono, hacer zoom y abrir panel de Sentinel
@@ -128,11 +137,29 @@ export default function LeafletMap() {
             });
 
             polygon.addTo(drawnItemsRef.current!);
+            polygonLayersRef.current.set(poly.id, polygon);
         });
     }, [polygons]);
 
+    useMapAnalysisOverlays({
+        mapRef,
+        polygons,
+        polygonLayersRef,
+        mode: overlayMode,
+        textureKernel,
+        refreshVersion: overlayRefreshVersion,
+    });
+
     return (
         <>
+            <div className="mb-3">
+                <MapOverlayControls
+                    mode={overlayMode}
+                    textureKernel={textureKernel}
+                    onModeChange={setOverlayMode}
+                    onTextureKernelChange={setTextureKernel}
+                />
+            </div>
             <div id="map" className="w-full h-[75vh] min-h-[600px] rounded-xl overflow-hidden relative" />
 
             {selectedPolygon && (
@@ -141,6 +168,7 @@ export default function LeafletMap() {
                     polygonName={selectedPolygon.name}
                     isOpen={isPanelOpen}
                     onClose={() => setIsPanelOpen(false)}
+                    onAnalysisUpdated={() => setOverlayRefreshVersion((version) => version + 1)}
                 />
             )}
         </>

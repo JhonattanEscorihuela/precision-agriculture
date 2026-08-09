@@ -17,7 +17,7 @@ export default function ParcelAnalysisWidgets({
   polygonName,
   polygonCoordinates,
 }: ParcelAnalysisWidgetsProps) {
-  const { segmentation, texture, phenology, retry } = useParcelAnalysis(polygonId);
+  const { latestNDVI, segmentation, texture, phenology, retry } = useParcelAnalysis(polygonId);
 
   return (
     <>
@@ -27,8 +27,16 @@ export default function ParcelAnalysisWidgets({
         polygonCoordinates={polygonCoordinates}
         onAnalysisUpdated={retry}
       />
-      <SegmentationPanel state={segmentation} onRetry={retry} />
-      <TextureWidget state={texture} onRetry={retry} />
+      <SegmentationPanel
+        acquisitionId={latestNDVI.data?.acquisition_id}
+        state={segmentation}
+        onRetry={retry}
+      />
+      <TextureWidget
+        ndviResultId={latestNDVI.data?.ndvi_result_id}
+        state={texture}
+        onRetry={retry}
+      />
       <FenologicalComparisonWidget state={phenology} onRetry={retry} />
     </>
   );

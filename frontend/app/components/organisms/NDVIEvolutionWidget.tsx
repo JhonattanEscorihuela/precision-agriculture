@@ -6,6 +6,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isAxiosError } from 'axios';
 import { useAuth } from '@/app/context/AuthContext';
 import { useDateRange } from '@/app/context/DateRangeContext';
 import apiClient from '@/lib/axios';
@@ -48,7 +49,7 @@ interface ApiErrorResponse {
 }
 
 function getAxiosError(error: unknown) {
-  return axios.isAxiosError<ApiErrorResponse>(error) ? error : null;
+  return isAxiosError<ApiErrorResponse>(error) ? error : null;
 }
 
 /**

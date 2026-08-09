@@ -3,6 +3,8 @@
 **/venv_39/
 **/*.pyc
 **/__pycache__/
+**/.pytest_cache/
+**/.ipynb_checkpoints/
 
 # Ignorar logs y dumps
 *.log
@@ -15,4 +17,11 @@
 # Ignorar archivos configurativos o credenciales locales
 .DS_Store
 *.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+*.pem
+*.key
+id_rsa*
+secrets.json
 .*.swp

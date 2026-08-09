@@ -22,8 +22,9 @@ export default function FenologicalComparisonWidget({
   onRetry,
 }: FenologicalComparisonWidgetProps) {
   const result = state.data;
-  const matchesPattern = Boolean(result && result.similarity_score >= 0.85);
-  const similarityPercentage = result ? Math.round(result.similarity_score * 100) : 0;
+  const similarityPercentage = result?.similarity_score === null || !result
+    ? null
+    : Math.round(result.similarity_score * 100);
   const chartData = result?.curve_data.map((point) => ({
     ...point,
     displayDate: new Date(`${point.date}T00:00:00`).toLocaleDateString('es-ES', {
@@ -42,11 +43,29 @@ export default function FenologicalComparisonWidget({
         </div>
         {state.status === 'success' && result && (
           <div className="flex items-center gap-2 sm:flex-col sm:items-end">
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${matchesPattern ? 'bg-emerald-100 text-emerald-800 ring-emerald-300' : 'bg-red-100 text-red-800 ring-red-300'}`}>
-              {matchesPattern ? 'Patrón de arroz detectado' : 'Patrón de arroz no detectado'}
-            </span>
-            <span className="text-2xl font-bold text-gray-900">{similarityPercentage}%</span>
-            <span className="text-xs text-gray-500">de correlación</span>
+            {result.sufficient_for_classification && result.matches_rice_pattern !== null ? (
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${result.matches_rice_pattern ? 'bg-emerald-100 text-emerald-800 ring-emerald-300' : 'bg-red-100 text-red-800 ring-red-300'}`}>
+                {result.matches_rice_pattern ? 'Patrón de arroz detectado' : 'Patrón de arroz no detectado'}
+              </span>
+            ) : !result.sufficient_for_classification ? (
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-300">
+                Comparación exploratoria
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-300">
+                Resultado no concluyente
+              </span>
+            )}
+            {result.sufficient_for_classification && similarityPercentage !== null ? (
+              <>
+                <span className="text-2xl font-bold text-gray-900">{similarityPercentage}%</span>
+                <span className="text-xs text-gray-500">de correlación</span>
+              </>
+            ) : !result.sufficient_for_classification ? (
+              <span className="text-sm font-semibold text-amber-800">
+                {result.dates_compared}/{result.minimum_observations} observaciones
+              </span>
+            ) : null}
           </div>
         )}
       </div>
@@ -64,7 +83,7 @@ export default function FenologicalComparisonWidget({
         <div className="h-72 rounded-lg border border-dashed border-emerald-300 bg-white/70 p-6 text-center">
           <p className="mt-16 font-semibold text-gray-800">No hay suficientes datos para comparar</p>
           <p className="mt-2 text-sm text-gray-600">
-            {state.error ?? 'Se necesitan al menos cinco fechas NDVI coincidentes.'}
+            {state.error ?? 'No hay observaciones NDVI válidas para realizar la comparación.'}
           </p>
           <button className="mt-5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700" onClick={onRetry} type="button">Reintentar</button>
         </div>
@@ -95,10 +114,21 @@ export default function FenologicalComparisonWidget({
               </ResponsiveContainer>
             </div>
           </div>
-          <p className="mt-3 text-xs text-gray-600">{result.classification}</p>
-          <p className="mt-1 text-xs text-gray-500">
-            {result.dates_compared} fechas comparadas · Referencia construida con {result.reference_polygon_ids.length} parcelas de arroz.
-          </p>
+          <div className="mt-3 space-y-2 text-xs">
+            <p className="font-medium text-gray-700">{result.classification}</p>
+            {!result.sufficient_for_classification && (
+              <p className="text-amber-800">
+                Cobertura: {result.dates_compared}/{result.minimum_observations} observaciones y {result.observation_span_days}/{result.minimum_span_days} días.
+              </p>
+            )}
+            {result.warnings.length > 0 && (
+              <ul className="list-disc space-y-1 pl-5 text-amber-800">
+                {result.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
+            <p className="text-gray-500">Fuente de referencia: {result.reference_source}</p>
+            <p className="text-gray-500">Alineación: {result.alignment_method}</p>
+          </div>
         </div>
       )}
     </section>

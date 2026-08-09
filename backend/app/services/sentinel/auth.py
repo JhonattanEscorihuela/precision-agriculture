@@ -52,7 +52,7 @@ class SentinelAuth:
         )
 
         self._access_token = token_response["access_token"]
-        logger.info(f"✅ Authentication successful! Token: {self._access_token[:20]}...")
+        logger.info("✅ Authentication successful")
         return self._access_token
 
     def ensure_authenticated(self) -> str:

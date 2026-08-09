@@ -55,6 +55,7 @@ export interface TextureDescriptor {
 
 export interface PhenologyCurvePoint {
   date: string;
+  days_since_first_observation: number;
   ndvi_parcel: number;
   ndvi_reference: number;
 }
@@ -63,12 +64,21 @@ export interface PhenologyComparison {
   polygon_id: number;
   reference_polygon_ids: number[];
   dates_compared: number;
-  similarity_score: number;
+  similarity_score: number | null;
+  matches_rice_pattern: boolean | null;
+  sufficient_for_classification: boolean;
+  observation_span_days: number;
+  minimum_observations: number;
+  minimum_span_days: number;
+  reference_source: string;
+  alignment_method: string;
+  warnings: string[];
   classification: string;
   curve_data: PhenologyCurvePoint[];
 }
 
 export interface UseParcelAnalysisResult {
+  latestNDVI: ResourceState<NDVISummary>;
   segmentation: ResourceState<SegmentationResult>;
   texture: ResourceState<TextureDescriptor[]>;
   phenology: ResourceState<PhenologyComparison>;

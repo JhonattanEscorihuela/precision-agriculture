@@ -16,7 +16,9 @@ FAILED=0
 
 # 1. Verificar que SECRET_KEY NO aparece en logs
 echo "1️⃣ Verificando que SECRET_KEY no se expone en logs..."
-if docker-compose logs backend 2>/dev/null | grep -q "de12746cbe0bd60a04203aa31279f5ded4ee4d78531f71bf9d21a1d3ddeb7abe"; then
+if [ -z "${SECRET_KEY:-}" ]; then
+    echo -e "${YELLOW}⚠️  WARN: Define SECRET_KEY para ejecutar esta comprobación${NC}"
+elif docker-compose logs backend 2>/dev/null | grep -Fq -- "$SECRET_KEY"; then
     echo -e "${RED}❌ FAIL: SECRET_KEY encontrada en logs (CRÍTICO)${NC}"
     ((FAILED++))
 else

@@ -2,8 +2,10 @@
 
 import type { ResourceState, TextureDescriptor } from '@/lib/analysisTypes';
 import TextureDescriptorsTable from '../molecules/TextureDescriptorsTable';
+import TextureOverlayPreview from '../molecules/TextureOverlayPreview';
 
 interface TextureWidgetProps {
+  ndviResultId?: number | null;
   state: ResourceState<TextureDescriptor[]>;
   onRetry: () => void;
 }
@@ -17,7 +19,7 @@ const formatCalculationDate = (date: string) =>
     minute: '2-digit',
   }).format(new Date(date));
 
-export default function TextureWidget({ state, onRetry }: TextureWidgetProps) {
+export default function TextureWidget({ ndviResultId, state, onRetry }: TextureWidgetProps) {
   const descriptors = state.data;
 
   return (
@@ -55,10 +57,18 @@ export default function TextureWidget({ state, onRetry }: TextureWidgetProps) {
       )}
 
       {state.status === 'success' && descriptors && (
-        <div>
-          <TextureDescriptorsTable descriptors={descriptors} />
+        <div className="space-y-5">
+          <TextureOverlayPreview ndviResultId={ndviResultId} />
+          <details className="rounded-xl border border-violet-200 bg-white/70" open>
+            <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-violet-900">
+              Tabla de descriptores
+            </summary>
+            <div className="px-3 pb-3">
+              <TextureDescriptorsTable descriptors={descriptors} />
+            </div>
+          </details>
           {descriptors[0] && (
-            <p className="mt-3 text-xs text-gray-500">Calculado el {formatCalculationDate(descriptors[0].calculation_date)}</p>
+            <p className="text-xs text-gray-500">Calculado el {formatCalculationDate(descriptors[0].calculation_date)}</p>
           )}
         </div>
       )}

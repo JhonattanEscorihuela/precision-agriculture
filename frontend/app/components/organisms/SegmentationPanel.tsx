@@ -1,8 +1,10 @@
 /** OE3 - Presentación del resultado real de segmentación espacial. */
 
 import type { ResourceState, SegmentationResult } from '@/lib/analysisTypes';
+import NDVIOverlayPreview from '@/app/components/molecules/NDVIOverlayPreview';
 
 interface SegmentationPanelProps {
+  acquisitionId?: number | null;
   state: ResourceState<SegmentationResult>;
   onRetry: () => void;
 }
@@ -16,7 +18,11 @@ const formatCalculationDate = (date: string) =>
     minute: '2-digit',
   }).format(new Date(date));
 
-export default function SegmentationPanel({ state, onRetry }: SegmentationPanelProps) {
+export default function SegmentationPanel({
+  acquisitionId,
+  state,
+  onRetry,
+}: SegmentationPanelProps) {
   const result = state.data;
   const cultivatedPercentage = result
     ? Math.min(100, Math.max(0, result.cultivated_percentage))
@@ -114,6 +120,10 @@ export default function SegmentationPanel({ state, onRetry }: SegmentationPanelP
               <dd className="mt-1 text-sm font-semibold text-gray-800">{result.threshold_used.toFixed(2)}</dd>
             </div>
           </dl>
+
+          <div className="mt-5 border-t border-emerald-200 pt-5">
+            <NDVIOverlayPreview acquisitionId={acquisitionId} />
+          </div>
         </div>
       )}
     </section>

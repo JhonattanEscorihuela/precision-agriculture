@@ -1,13 +1,13 @@
-"""
-OE3 - Servicio de comparación fenológica para clasificación de cultivos.
-Compara curvas NDVI temporales contra parcelas de referencia (arroz confirmado).
-"""
+"""OE3 - Comparación fenológica contra una plantilla teórica de arroz."""
 
 import logging
-from typing import Dict, Any, List
-from sqlalchemy.ext.asyncio import AsyncSession
+import math
+from datetime import date
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
 from fastapi import HTTPException
 from scipy.stats import pearsonr
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import ndvi as crud_ndvi
 from app.crud import polygon as crud_polygon
@@ -16,241 +16,223 @@ logger = logging.getLogger(__name__)
 
 
 class PhenologyService:
-    """
-    Servicio de comparación fenológica para clasificación de cultivos.
+    """Compara la evolución NDVI de una parcela con una plantilla de arroz."""
 
-    Compara la evolución temporal del NDVI de una parcela contra la curva
-    de referencia promedio de parcelas conocidas como arroz, utilizando
-    correlación de Pearson como métrica de similitud.
-
-    Parcelas de referencia (arroz confirmado):
-    - Polygon ID 1 = Parcela 211 (SRRG, período 2024-2025)
-    - Polygon ID 2 = Parcela 217 (SRRG, Invierno 2024)
-    - Polygon ID 3 = Parcela 85 (SRRG, período 2025-2026)
-    """
-
-    # Parcelas de referencia con arroz confirmado
-    REFERENCE_POLYGON_IDS = [1, 2, 3]
-
-    # Umbrales de clasificación (basados en correlación de Pearson)
-    THRESHOLD_HIGH = 0.85      # r >= 0.85 → Alta similitud (probablemente arroz)
-    THRESHOLD_MODERATE = 0.70  # 0.70 <= r < 0.85 → Similitud moderada
-    # r < 0.70 → Baja similitud (probablemente NO es arroz)
-
-    async def build_reference_curve(self, db: AsyncSession) -> Dict[str, float]:
-        """
-        Construye la curva fenológica de referencia del arroz.
-
-        Promedia los valores de NDVI de las 3 parcelas de referencia
-        para cada fecha de adquisición disponible. Esto genera una
-        "firma fenológica" del cultivo de arroz en la región.
-
-        Args:
-            db: Sesión async de base de datos
-
-        Returns:
-            Dict[fecha_iso, ndvi_promedio] ordenado cronológicamente.
-            Ejemplo:
-            {
-                "2026-02-12": 0.55,
-                "2026-02-17": 0.58,
-                ...
-            }
-
-        Algoritmo:
-            1. Obtener todos los NDVI de las 3 parcelas de referencia
-            2. Agrupar por fecha de adquisición
-            3. Para cada fecha: calcular promedio de ndvi_mean
-            4. Retornar dict ordenado por fecha
-
-        Raises:
-            HTTPException 500: Si no hay datos suficientes en referencias
-        """
-        logger.info("🌾 Construyendo curva fenológica de referencia del arroz")
-
-        # Diccionario para acumular valores por fecha
-        # date_str -> lista de ndvi_mean values
-        date_ndvi_map: Dict[str, List[float]] = {}
-
-        # 1. Obtener NDVI de todas las parcelas de referencia
-        for polygon_id in self.REFERENCE_POLYGON_IDS:
-            try:
-                ndvi_results_with_dates = await crud_ndvi.get_ndvi_by_polygon(db, polygon_id)
-
-                if not ndvi_results_with_dates:
-                    logger.warning(f"⚠️  Parcela de referencia {polygon_id} sin datos NDVI")
-                    continue
-
-                logger.debug(f"   Parcela {polygon_id}: {len(ndvi_results_with_dates)} fechas")
-
-                # 2. Acumular valores por fecha
-                for ndvi_result, acquisition_date in ndvi_results_with_dates:
-                    date_str = acquisition_date  # Ya es string desde BD
-
-                    if date_str not in date_ndvi_map:
-                        date_ndvi_map[date_str] = []
-
-                    date_ndvi_map[date_str].append(ndvi_result.ndvi_mean)
-
-            except Exception as e:
-                logger.error(f"❌ Error obteniendo NDVI de parcela {polygon_id}: {str(e)}")
-                continue
-
-        # Validar que tenemos datos
-        if not date_ndvi_map:
-            raise HTTPException(
-                status_code=500,
-                detail="No NDVI data found in reference parcels. Cannot build reference curve."
-            )
-
-        # 3. Calcular promedio por fecha
-        reference_curve = {}
-        for date_str, ndvi_values in date_ndvi_map.items():
-            mean_ndvi = sum(ndvi_values) / len(ndvi_values)
-            reference_curve[date_str] = mean_ndvi
-
-        # 4. Ordenar por fecha
-        reference_curve = dict(sorted(reference_curve.items()))
-
-        logger.info(f"✅ Curva de referencia construida: {len(reference_curve)} fechas")
-        return reference_curve
+    RICE_REFERENCE_TEMPLATE: Sequence[Tuple[int, float]] = (
+        (0, 0.30),
+        (35, 0.50),
+        (50, 0.60),
+        (65, 0.80),
+        (75, 0.70),
+        (95, 0.60),
+        (120, 0.50),
+        (150, 0.40),
+    )
+    REFERENCE_SOURCE = "Plantilla teórica de arroz — Rio Grande do Sul (Brasil)"
+    ALIGNMENT_METHOD = "Días desde la primera observación NDVI (aproximación)"
+    MINIMUM_OBSERVATIONS = 5
+    MINIMUM_SPAN_DAYS = 90
+    THRESHOLD_HIGH = 0.85
+    THRESHOLD_MODERATE = 0.70
+    VARIANCE_EPSILON = 1e-12
 
     async def compare_parcel(
         self,
         polygon_id: int,
         user_id: int,
-        db: AsyncSession
+        db: AsyncSession,
     ) -> Dict[str, Any]:
-        """
-        Compara la curva NDVI de una parcela contra la curva de referencia del arroz.
+        """Construye una comparación alineada por días desde la primera observación."""
+        logger.info("Comparando fenología de la parcela %s", polygon_id)
 
-        Utiliza correlación de Pearson para cuantificar la similitud entre
-        la evolución temporal del NDVI de la parcela y la firma fenológica
-        del arroz. Valores altos de correlación (r >= 0.85) sugieren que
-        la parcela corresponde a arroz.
-
-        Args:
-            polygon_id: ID de la parcela a clasificar
-            user_id: ID del usuario (ownership)
-            db: Sesión async de base de datos
-
-        Returns:
-            Dict con:
-            - polygon_id: ID de la parcela analizada
-            - reference_polygon_ids: [1, 2, 3]
-            - dates_compared: Cantidad de fechas con datos en ambas curvas
-            - similarity_score: Correlación de Pearson [-1, 1]
-            - classification: Texto interpretativo según umbrales
-            - curve_data: Lista de puntos con ndvi_parcel y ndvi_reference por fecha
-
-        Raises:
-            HTTPException 404: Si polygon no existe
-            HTTPException 403: Si usuario no tiene acceso
-            HTTPException 400: Si parcela es referencia, sin NDVI, o fechas insuficientes
-        """
-        logger.info(f"📊 Comparando parcela {polygon_id} contra referencia de arroz")
-
-        # 1. Verificar polygon existe y pertenece al usuario
         polygon = await crud_polygon.get_polygon_by_id(db, polygon_id)
         if not polygon:
-            logger.error(f"❌ Polygon {polygon_id} no encontrado")
             raise HTTPException(status_code=404, detail="Polygon not found")
 
         if polygon.user_id != user_id:
-            logger.error(f"❌ Usuario {user_id} no tiene acceso a polygon {polygon_id}")
             raise HTTPException(
                 status_code=403,
-                detail="You don't have permission to access this polygon"
+                detail="You don't have permission to access this polygon",
             )
 
-        # 2. Verificar que no sea una parcela de referencia
-        if polygon_id in self.REFERENCE_POLYGON_IDS:
-            logger.error(f"❌ Polygon {polygon_id} es una parcela de referencia")
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot compare reference parcel against itself"
-            )
-
-        # 3. Obtener NDVI de la parcela a comparar
         ndvi_results_with_dates = await crud_ndvi.get_ndvi_by_polygon(db, polygon_id)
-
         if not ndvi_results_with_dates:
-            logger.error(f"❌ Parcela {polygon_id} sin datos NDVI")
             raise HTTPException(
                 status_code=400,
-                detail="No NDVI data for this parcel. Calculate NDVI first."
+                detail="No NDVI data for this parcel. Calculate NDVI first.",
             )
 
-        logger.info(f"   Parcela tiene {len(ndvi_results_with_dates)} fechas con NDVI")
-
-        # Construir curva de la parcela
-        parcel_curve = {}
-        for ndvi_result, acquisition_date in ndvi_results_with_dates:
-            date_str = acquisition_date  # Ya es string
-            parcel_curve[date_str] = ndvi_result.ndvi_mean
-
-        # 5. Construir curva de referencia
-        reference_curve = await self.build_reference_curve(db)
-
-        # 6. Alinear fechas: solo usar fechas comunes
-        common_dates = sorted(set(parcel_curve.keys()) & set(reference_curve.keys()))
-
-        if len(common_dates) < 5:
-            logger.error(f"❌ Fechas comunes insuficientes: {len(common_dates)}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient common dates for comparison (need at least 5, found {len(common_dates)})"
-            )
-
-        logger.info(f"   Fechas comunes para comparación: {len(common_dates)}")
-
-        # 7. Preparar arrays para correlación
-        parcel_values = [parcel_curve[date] for date in common_dates]
-        reference_values = [reference_curve[date] for date in common_dates]
-
-        # 8. Calcular correlación de Pearson
-        r, p_value = pearsonr(parcel_values, reference_values)
-
-        logger.info(f"   Correlación de Pearson: r={r:.3f}, p={p_value:.4f}")
-
-        # 9. Clasificar según umbrales
-        classification = self._classify(r)
-
-        logger.info(f"   Clasificación: {classification}")
-
-        # 10. Construir curve_data para visualización
-        curve_data = [
-            {
-                "date": date,
-                "ndvi_parcel": parcel_curve[date],
-                "ndvi_reference": reference_curve[date]
-            }
-            for date in common_dates
+        warnings: List[str] = [
+            "El día 0 corresponde a la primera observación NDVI disponible, "
+            "no a la fecha real de siembra."
         ]
+        observations = self._aggregate_observations(ndvi_results_with_dates, warnings)
+        if not observations:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid NDVI data for this parcel. Recalculate NDVI first.",
+            )
 
-        # 11. Retornar resultado completo
+        first_date = observations[0][0]
+        curve_data = []
+        for observation_date, ndvi_mean in observations:
+            days_since_first = (observation_date - first_date).days
+            curve_data.append(
+                {
+                    "date": observation_date.isoformat(),
+                    "days_since_first_observation": days_since_first,
+                    "ndvi_parcel": ndvi_mean,
+                    "ndvi_reference": self._interpolate_reference(days_since_first),
+                }
+            )
+
+        observation_span_days = curve_data[-1]["days_since_first_observation"]
+        parcel_values = [point["ndvi_parcel"] for point in curve_data]
+        reference_values = [point["ndvi_reference"] for point in curve_data]
+        sufficient, sufficiency_warnings = self._validate_for_classification(
+            parcel_values,
+            reference_values,
+            observation_span_days,
+        )
+        warnings.extend(sufficiency_warnings)
+
+        similarity_score = None
+        matches_rice_pattern = None
+        if sufficient:
+            correlation, _ = pearsonr(parcel_values, reference_values)
+            if math.isfinite(float(correlation)):
+                similarity_score = float(correlation)
+                matches_rice_pattern = self._matches_pattern(similarity_score)
+                classification = self._classify(similarity_score)
+            else:
+                sufficient = False
+                warnings.append("La correlación no produjo un valor finito.")
+                classification = self._exploratory_classification()
+        else:
+            classification = self._exploratory_classification()
+
         return {
             "polygon_id": polygon_id,
-            "reference_polygon_ids": self.REFERENCE_POLYGON_IDS,
-            "dates_compared": len(common_dates),
-            "similarity_score": r,
+            "reference_polygon_ids": [],
+            "dates_compared": len(curve_data),
+            "similarity_score": similarity_score,
+            "matches_rice_pattern": matches_rice_pattern,
+            "sufficient_for_classification": sufficient,
+            "observation_span_days": observation_span_days,
+            "minimum_observations": self.MINIMUM_OBSERVATIONS,
+            "minimum_span_days": self.MINIMUM_SPAN_DAYS,
+            "reference_source": self.REFERENCE_SOURCE,
+            "alignment_method": self.ALIGNMENT_METHOD,
             "classification": classification,
-            "curve_data": curve_data
+            "warnings": warnings,
+            "curve_data": curve_data,
         }
 
-    def _classify(self, r: float) -> str:
-        """
-        Clasifica la similitud según correlación de Pearson.
+    def _aggregate_observations(
+        self,
+        ndvi_results_with_dates: Sequence[Tuple[Any, Any]],
+        warnings: List[str],
+    ) -> List[Tuple[date, float]]:
+        """Promedia resultados duplicados por fecha y descarta valores inválidos."""
+        values_by_date: Dict[date, List[float]] = {}
+        discarded = 0
 
-        Args:
-            r: Coeficiente de correlación de Pearson [-1, 1]
+        for ndvi_result, acquisition_date in ndvi_results_with_dates:
+            try:
+                parsed_date = date.fromisoformat(str(acquisition_date)[:10])
+                ndvi_mean = float(ndvi_result.ndvi_mean)
+            except (TypeError, ValueError):
+                discarded += 1
+                continue
 
-        Returns:
-            Texto interpretativo de la clasificación
-        """
-        if r >= self.THRESHOLD_HIGH:
-            return "Alta similitud — probablemente arroz"
-        elif r >= self.THRESHOLD_MODERATE:
-            return "Similitud moderada — requiere revisión"
-        else:
-            return "Baja similitud — probablemente NO es arroz"
+            if not math.isfinite(ndvi_mean):
+                discarded += 1
+                continue
+
+            values_by_date.setdefault(parsed_date, []).append(ndvi_mean)
+
+        if discarded:
+            warnings.append(
+                f"Se descartaron {discarded} observaciones con fecha o NDVI no válido."
+            )
+
+        duplicated_dates = sum(len(values) > 1 for values in values_by_date.values())
+        if duplicated_dates:
+            warnings.append(
+                f"Se promediaron observaciones duplicadas en {duplicated_dates} "
+                "fechas de adquisición."
+            )
+
+        return [
+            (observation_date, sum(values) / len(values))
+            for observation_date, values in sorted(values_by_date.items())
+        ]
+
+    def _interpolate_reference(self, days_since_first: int) -> float:
+        """Interpola linealmente la plantilla y mantiene sus extremos constantes."""
+        if days_since_first <= self.RICE_REFERENCE_TEMPLATE[0][0]:
+            return self.RICE_REFERENCE_TEMPLATE[0][1]
+
+        for (left_day, left_ndvi), (right_day, right_ndvi) in zip(
+            self.RICE_REFERENCE_TEMPLATE,
+            self.RICE_REFERENCE_TEMPLATE[1:],
+        ):
+            if days_since_first <= right_day:
+                position = (days_since_first - left_day) / (right_day - left_day)
+                return left_ndvi + position * (right_ndvi - left_ndvi)
+
+        return self.RICE_REFERENCE_TEMPLATE[-1][1]
+
+    def _validate_for_classification(
+        self,
+        parcel_values: Sequence[float],
+        reference_values: Sequence[float],
+        observation_span_days: int,
+    ) -> Tuple[bool, List[str]]:
+        warnings = []
+
+        if len(parcel_values) < self.MINIMUM_OBSERVATIONS:
+            warnings.append(
+                f"Se requieren al menos {self.MINIMUM_OBSERVATIONS} observaciones; "
+                f"hay {len(parcel_values)}."
+            )
+        if observation_span_days < self.MINIMUM_SPAN_DAYS:
+            warnings.append(
+                f"Se requieren al menos {self.MINIMUM_SPAN_DAYS} días de cobertura; "
+                f"hay {observation_span_days}."
+            )
+        if not all(math.isfinite(value) for value in (*parcel_values, *reference_values)):
+            warnings.append("Las curvas contienen valores no finitos.")
+        if self._variance(parcel_values) <= self.VARIANCE_EPSILON:
+            warnings.append("La curva NDVI de la parcela no tiene variación suficiente.")
+        if self._variance(reference_values) <= self.VARIANCE_EPSILON:
+            warnings.append("La curva de referencia no tiene variación suficiente.")
+
+        return not warnings, warnings
+
+    @staticmethod
+    def _variance(values: Sequence[float]) -> float:
+        if not values:
+            return 0.0
+        mean = sum(values) / len(values)
+        return sum((value - mean) ** 2 for value in values) / len(values)
+
+    def _classify(self, correlation: float) -> str:
+        if correlation >= self.THRESHOLD_HIGH:
+            return "Alta similitud — patrón fenológico compatible con arroz"
+        if correlation >= self.THRESHOLD_MODERATE:
+            return "Similitud moderada — resultado no concluyente"
+        return "Baja similitud — patrón fenológico no compatible con arroz"
+
+    def _matches_pattern(self, correlation: float) -> Optional[bool]:
+        if correlation >= self.THRESHOLD_HIGH:
+            return True
+        if correlation < self.THRESHOLD_MODERATE:
+            return False
+        return None
+
+    def _exploratory_classification(self) -> str:
+        return (
+            "Comparación exploratoria — aún no hay cobertura temporal suficiente "
+            "para clasificar el patrón fenológico."
+        )

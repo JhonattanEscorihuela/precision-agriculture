@@ -6,6 +6,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { isAxiosError } from 'axios';
 import { useAuth } from '@/app/context/AuthContext';
 import apiClient from '@/lib/axios';
 import NDVIStats from '../molecules/NDVIStats';
@@ -15,6 +16,7 @@ interface NDVIPanelProps {
   acquisitionId: number;
   polygonId: number;
   onClose?: () => void;
+  onCalculated?: () => void;
 }
 
 type PanelState = 'idle' | 'loading' | 'calculated' | 'error';
@@ -45,7 +47,7 @@ interface ApiErrorResponse {
 }
 
 function getAxiosError(error: unknown) {
-  return axios.isAxiosError<ApiErrorResponse>(error) ? error : null;
+  return isAxiosError<ApiErrorResponse>(error) ? error : null;
 }
 
 /**
@@ -64,7 +66,7 @@ function getAxiosError(error: unknown) {
  * 2. Usuario click "Calcular NDVI" → POST /api/ndvi/calculate
  * 3. Usuario vuelve a abrir → muestra stats sin recalcular
  */
-export default function NDVIPanel({ acquisitionId, onClose }: NDVIPanelProps) {
+export default function NDVIPanel({ acquisitionId, onClose, onCalculated }: NDVIPanelProps) {
   const { token } = useAuth();
   const [state, setState] = useState<PanelState>('loading');
   const [ndviData, setNdviData] = useState<NDVIData | null>(null);
@@ -153,6 +155,7 @@ export default function NDVIPanel({ acquisitionId, onClose }: NDVIPanelProps) {
         stats: response.data.stats
       });
       setState('calculated');
+      onCalculated?.();
     } catch (error: unknown) {
       const requestError = getAxiosError(error);
       if (requestError?.response?.status === 401) {

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/axios';
+import { isAxiosError } from 'axios';
 
 interface User {
   id: number;
@@ -29,6 +30,11 @@ interface StoredAuth {
 }
 
 const EMPTY_AUTH: StoredAuth = { user: null, token: null };
+
+const getAuthErrorMessage = (error: unknown, fallback: string) =>
+  isAxiosError<{ detail?: string }>(error)
+    ? error.response?.data?.detail ?? fallback
+    : fallback;
 
 function readStoredAuth(): StoredAuth {
   if (typeof window === 'undefined') return EMPTY_AUTH;
@@ -71,8 +77,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('user', JSON.stringify(data.user));
 
       router.push('/');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Error al iniciar sesión');
+    } catch (error: unknown) {
+      throw new Error(getAuthErrorMessage(error, 'Error al iniciar sesión'));
     }
   };
 
@@ -86,8 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Auto-login después del registro
       await login(email, password);
-    } catch (error: any) {
-      throw new Error(error.response?.data?.detail || 'Error al registrarse');
+    } catch (error: unknown) {
+      throw new Error(getAuthErrorMessage(error, 'Error al registrarse'));
     }
   };
 
