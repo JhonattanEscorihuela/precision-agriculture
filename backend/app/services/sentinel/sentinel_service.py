@@ -164,6 +164,41 @@ class SentinelService:
             polygon_id=polygon_id
         )
 
+    async def download_true_color_tiff(
+        self,
+        polygon_geojson: Dict,
+        start_date: str,
+        end_date: str,
+        width: int = 512,
+        height: int = 512,
+        max_cloud_coverage: int = 20,
+        polygon_id: Optional[int] = None
+    ) -> bytes:
+        """
+        Descarga imagen RGB true-color como TIFF georreferenciado.
+
+        Args:
+            polygon_geojson: Polígono en formato GeoJSON (geometry)
+            start_date: Fecha inicio (YYYY-MM-DD)
+            end_date: Fecha fin (YYYY-MM-DD)
+            width: Ancho en píxeles
+            height: Alto en píxeles
+            max_cloud_coverage: Cobertura máxima de nubes (0-100)
+            polygon_id: ID del polígono (para logging)
+
+        Returns:
+            bytes: Contenido del PNG
+        """
+        return await self.process_client.download_true_color(
+            polygon_geojson=polygon_geojson,
+            start_date=start_date,
+            end_date=end_date,
+            width=width,
+            height=height,
+            max_cloud_coverage=max_cloud_coverage,
+            polygon_id=polygon_id
+        )
+
     async def check_availability(
         self,
         polygon_geojson: Dict,

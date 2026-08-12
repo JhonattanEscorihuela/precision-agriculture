@@ -72,6 +72,12 @@ class NDVIResult(NDVIResultBase, table=True):
         description="PNG coloreado RGBA del NDVI para visualización (caché)"
     )
 
+    # Imagen satelital true color en caché
+    satellite_png: Optional[bytes] = Field(
+        default=None,
+        description="PNG RGB true color de la imagen satelital para visualización (caché)"
+    )
+
     # Timestamps
     calculation_date: datetime = Field(
         sa_column=Column(DateTime),

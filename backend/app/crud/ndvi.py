@@ -246,4 +246,36 @@ async def update_overlay_cache(
     except Exception as e:
         await db.rollback()
         logger.error(f"❌ Error updating overlay cache: {str(e)}")
+
+
+async def update_satellite_cache(
+    db: AsyncSession,
+    ndvi_id: int,
+    satellite_png: bytes
+) -> bool:
+    """
+    Actualiza el campo satellite_png (caché) de un resultado NDVI.
+
+    Args:
+        db: Sesión async de base de datos
+        ndvi_id: ID del resultado NDVI
+        satellite_png: PNG RGB true color en bytes para cachear
+
+    Returns:
+        True si se actualizó correctamente
+    """
+    try:
+        query = select(NDVIResult).where(NDVIResult.id == ndvi_id)
+        result = await db.execute(query)
+        ndvi_result = result.scalar_one_or_none()
+
+        if not ndvi_result:
+            return False
+
+        ndvi_result.satellite_png = satellite_png
+        await db.commit()
+        return True
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"❌ Error updating satellite image cache: {str(e)}")
         raise

@@ -220,6 +220,68 @@ class ProcessClient:
             response.raise_for_status()
             return response.content
 
+    async def download_true_color_tiff(
+        self,
+        polygon_geojson: Dict,
+        start_date: str,
+        end_date: str,
+        width: int = 512,
+        height: int = 512,
+        max_cloud_coverage: int = 20,
+        polygon_id: Optional[int] = None
+    ) -> bytes:
+        """
+        Descarga imagen RGB true-color (B04, B03, B02) como TIFF georreferenciado.
+
+        Args:
+            polygon_geojson: Polígono en formato GeoJSON (geometry)
+            start_date: Fecha inicio (YYYY-MM-DD)
+            end_date: Fecha fin (YYYY-MM-DD)
+            width: Ancho de la imagen en píxeles
+            height: Alto de la imagen en píxeles
+            max_cloud_coverage: Cobertura máxima de nubes (0-100)
+            polygon_id: ID del polígono (para logging)
+
+        Returns:
+            bytes: Contenido del GeoTIFF con imagen RGB (3 bandas UINT8)
+
+        Raises:
+            httpx.HTTPError: Si falla la descarga
+        """
+        token = self.auth.ensure_authenticated()
+
+        evalscript = build_true_color_evalscript()
+        request_payload = build_process_request(
+            polygon_geojson=polygon_geojson,
+            start_date=start_date,
+            end_date=end_date,
+            evalscript=evalscript,
+            width=width,
+            height=height,
+            max_cloud_coverage=max_cloud_coverage,
+            response_format="image/tiff"  # ← TIFF en lugar de PNG
+        )
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        log_request_details("DOWNLOAD_TRUE_COLOR", polygon_geojson, request_payload, polygon_id)
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                self.PROCESS_URL,
+                json=request_payload,
+                headers=headers
+            )
+
+            success = (response.status_code == 200)
+            log_response_details("DOWNLOAD_TRUE_COLOR", response, success)
+
+            response.raise_for_status()
+            return response.content
+
     async def check_availability(
         self,
         polygon_geojson: Dict,
