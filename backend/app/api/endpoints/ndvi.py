@@ -364,18 +364,24 @@ async def get_ndvi_overlay(
         result = await db.execute(query)
         acquisition_date = result.scalar_one_or_none()
 
-        # 4. Cache check
+        # 4. Preparar geometría del polígono para máscara
+        polygon_geojson = {
+            "type": "Polygon",
+            "coordinates": [polygon.coordinates]  # polygon.coordinates ya es [[lng, lat], ...]
+        }
+
+        # 5. Cache check
         if ndvi_result.overlay_png and not force:
             # Servir desde caché
             png_bytes = ndvi_result.overlay_png
             # Re-generar bounds desde el TIFF (no se cachean separadamente)
-            _, leaflet_bounds = generate_ndvi_overlay(ndvi_result.ndvi_tiff)
+            _, leaflet_bounds = generate_ndvi_overlay(ndvi_result.ndvi_tiff, polygon_geojson)
             cached = True
         else:
-            # 5. Generar overlay
-            png_bytes, leaflet_bounds = generate_ndvi_overlay(ndvi_result.ndvi_tiff)
+            # 6. Generar overlay con máscara de polígono
+            png_bytes, leaflet_bounds = generate_ndvi_overlay(ndvi_result.ndvi_tiff, polygon_geojson)
 
-            # 6. Guardar en cache
+            # 7. Guardar en cache
             await crud_ndvi.update_overlay_cache(db, ndvi_result.id, png_bytes)
             cached = False
 
