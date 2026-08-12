@@ -1,13 +1,23 @@
 /** OE4 - Contenedor del estado y la tabla de descriptores reales. */
 
-import type { ResourceState, TextureDescriptor } from '@/lib/analysisTypes';
+'use client';
+
+import { useState } from 'react';
+import type { ResourceState, TextureDescriptor, NDVISummary } from '@/lib/analysisTypes';
 import TextureDescriptorsTable from '../molecules/TextureDescriptorsTable';
 import TextureOverlayPreview from '../molecules/TextureOverlayPreview';
+import { useSatelliteImage } from '@/app/hooks/useSatelliteImage';
 
 interface TextureWidgetProps {
   ndviResultId?: number | null;
   state: ResourceState<TextureDescriptor[]>;
   onRetry: () => void;
+}
+
+interface TextureWidgetPropsExtended extends TextureWidgetProps {
+  acquisitionId?: number | null;
+  availableDates?: NDVISummary[];
+  onDateChange?: (acquisitionId: number) => void;
 }
 
 const formatCalculationDate = (date: string) =>
@@ -19,8 +29,27 @@ const formatCalculationDate = (date: string) =>
     minute: '2-digit',
   }).format(new Date(date));
 
-export default function TextureWidget({ ndviResultId, state, onRetry }: TextureWidgetProps) {
+export default function TextureWidget({
+  ndviResultId,
+  acquisitionId,
+  availableDates = [],
+  onDateChange,
+  state,
+  onRetry,
+}: TextureWidgetPropsExtended) {
   const descriptors = state.data;
+
+  const [showSatellite, setShowSatellite] = useState(false);
+  const [satelliteOnly, setSatelliteOnly] = useState(false);
+  const satellite = useSatelliteImage(acquisitionId);
+
+  const handleToggleSatellite = async () => {
+    if (!showSatellite && !satellite.data && !satellite.loading) {
+      await satellite.load();
+    }
+    setShowSatellite(!showSatellite);
+    if (showSatellite) setSatelliteOnly(false);
+  };
 
   return (
     <section className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-purple-50 p-6 shadow-lg">
@@ -58,7 +87,57 @@ export default function TextureWidget({ ndviResultId, state, onRetry }: TextureW
 
       {state.status === 'success' && descriptors && (
         <div className="space-y-5">
-          <TextureOverlayPreview ndviResultId={ndviResultId} />
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm font-medium text-gray-700">Visualización</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  checked={showSatellite}
+                  className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-2 focus:ring-violet-500"
+                  onChange={handleToggleSatellite}
+                  type="checkbox"
+                />
+                <span className="text-sm text-gray-600">Imagen satélite</span>
+              </label>
+              {showSatellite && satellite.data && (
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    checked={satelliteOnly}
+                    className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-2 focus:ring-violet-500"
+                    onChange={(e) => setSatelliteOnly(e.target.checked)}
+                    type="checkbox"
+                  />
+                  <span className="text-sm text-gray-600">Solo imagen</span>
+                </label>
+              )}
+            </div>
+          </div>
+
+          {availableDates.length > 1 && onDateChange && (
+            <div className="mb-4 flex items-center gap-2">
+              <label className="text-xs font-semibold text-violet-900">
+                Fecha de análisis:
+                <select
+                  className="ml-2 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  onChange={(e) => onDateChange(Number(e.target.value))}
+                  value={acquisitionId ?? ''}
+                >
+                  {availableDates.map((date) => (
+                    <option key={date.acquisition_id} value={date.acquisition_id}>
+                      {new Date(date.acquisition_date).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+
+          <TextureOverlayPreview ndviResultId={ndviResultId} showSatellite={showSatellite} satelliteData={satellite.data} satelliteOnly={satelliteOnly} />
+
           <details className="rounded-xl border border-violet-200 bg-white/70" open>
             <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-violet-900">
               Tabla de descriptores

@@ -11,6 +11,7 @@ from .request_builder import (
     build_bands_evalscript,
     build_ndvi_evalscript,
     build_true_color_evalscript,
+    build_true_color_tiff_evalscript,
     build_check_availability_evalscript,
     build_process_request
 )
@@ -250,7 +251,7 @@ class ProcessClient:
         """
         token = self.auth.ensure_authenticated()
 
-        evalscript = build_true_color_evalscript()
+        evalscript = build_true_color_tiff_evalscript()  # ← Usar evalscript TIFF con FLOAT32
         request_payload = build_process_request(
             polygon_geojson=polygon_geojson,
             start_date=start_date,

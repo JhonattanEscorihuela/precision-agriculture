@@ -5,8 +5,17 @@ import { useOverlay } from '@/app/context/OverlayContext';
 import { useTextureOverlayPreview } from '@/app/hooks/useOverlayPreview';
 import type { TextureKernelType } from '@/lib/overlayTypes';
 
+interface SatelliteData {
+  image_base64: string;
+  bounds: [[number, number], [number, number]];
+  cached: boolean;
+}
+
 interface TextureOverlayPreviewProps {
   ndviResultId?: number | null;
+  showSatellite?: boolean;
+  satelliteData?: SatelliteData | null;
+  satelliteOnly?: boolean;
 }
 
 const kernelOptions: Array<{ value: TextureKernelType; label: string }> = [
@@ -21,7 +30,7 @@ const legend = [
   { label: 'Heterogéneo', color: 'bg-orange-500' },
 ];
 
-export default function TextureOverlayPreview({ ndviResultId }: TextureOverlayPreviewProps) {
+export default function TextureOverlayPreview({ ndviResultId, showSatellite, satelliteData, satelliteOnly }: TextureOverlayPreviewProps) {
   const { setTextureKernel, textureKernel } = useOverlay();
   const preview = useTextureOverlayPreview(ndviResultId);
 
@@ -59,7 +68,22 @@ export default function TextureOverlayPreview({ ndviResultId }: TextureOverlayPr
         <>
           <p className="rounded-lg border border-violet-200 bg-white/80 p-3 text-sm text-gray-700">{preview.data.interpretation}</p>
           <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-violet-200 bg-white">
-            <Image alt={`Mapa de textura: ${textureKernel}`} className="object-contain" fill sizes="(min-width: 1024px) 40vw, 90vw" src={preview.data.image_base64} unoptimized />
+            {showSatellite && satelliteData && (
+              <img
+                alt="Imagen satélite de fondo"
+                className="absolute inset-0 h-full w-full object-contain"
+                src={satelliteData.image_base64}
+              />
+            )}
+            <Image
+              alt={`Mapa de textura: ${textureKernel}`}
+              className="object-contain"
+              fill
+              sizes="(min-width: 1024px) 40vw, 90vw"
+              src={preview.data.image_base64}
+              style={satelliteOnly ? { opacity: 0 } : (showSatellite && satelliteData ? { opacity: 0.7 } : undefined)}
+              unoptimized
+            />
             {preview.isRefreshing && <div aria-hidden="true" className="absolute inset-0 animate-pulse bg-white/20" />}
           </div>
           <div aria-label="Leyenda de textura" className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-gray-700">

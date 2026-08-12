@@ -1,10 +1,16 @@
 /** OE3 - Presentación del resultado real de segmentación espacial. */
 
-import type { ResourceState, SegmentationResult } from '@/lib/analysisTypes';
+'use client';
+
+import { useState } from 'react';
+import type { ResourceState, SegmentationResult, NDVISummary } from '@/lib/analysisTypes';
 import NDVIOverlayPreview from '@/app/components/molecules/NDVIOverlayPreview';
+import { useSatelliteImage } from '@/app/hooks/useSatelliteImage';
 
 interface SegmentationPanelProps {
   acquisitionId?: number | null;
+  availableDates?: NDVISummary[];
+  onDateChange?: (acquisitionId: number) => void;
   state: ResourceState<SegmentationResult>;
   onRetry: () => void;
 }
@@ -20,6 +26,8 @@ const formatCalculationDate = (date: string) =>
 
 export default function SegmentationPanel({
   acquisitionId,
+  availableDates = [],
+  onDateChange,
   state,
   onRetry,
 }: SegmentationPanelProps) {
@@ -28,6 +36,18 @@ export default function SegmentationPanel({
     ? Math.min(100, Math.max(0, result.cultivated_percentage))
     : 0;
   const uncultivatedPercentage = 100 - cultivatedPercentage;
+
+  const [showSatellite, setShowSatellite] = useState(false);
+  const [satelliteOnly, setSatelliteOnly] = useState(false);
+  const satellite = useSatelliteImage(acquisitionId);
+
+  const handleToggleSatellite = async () => {
+    if (!showSatellite && !satellite.data && !satellite.loading) {
+      await satellite.load();
+    }
+    setShowSatellite(!showSatellite);
+    if (showSatellite) setSatelliteOnly(false);
+  };
 
   return (
     <section className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50 p-6 shadow-lg">
@@ -122,7 +142,56 @@ export default function SegmentationPanel({
           </dl>
 
           <div className="mt-5 border-t border-emerald-200 pt-5">
-            <NDVIOverlayPreview acquisitionId={acquisitionId} />
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm font-medium text-gray-700">Visualización</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    checked={showSatellite}
+                    className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-2 focus:ring-emerald-500"
+                    onChange={handleToggleSatellite}
+                    type="checkbox"
+                  />
+                  <span className="text-sm text-gray-600">Imagen satélite</span>
+                </label>
+                {showSatellite && satellite.data && (
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      checked={satelliteOnly}
+                      className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-2 focus:ring-emerald-500"
+                      onChange={(e) => setSatelliteOnly(e.target.checked)}
+                      type="checkbox"
+                    />
+                    <span className="text-sm text-gray-600">Solo imagen</span>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {availableDates.length > 1 && onDateChange && (
+              <div className="mb-4 flex items-center gap-2">
+                <label className="text-xs font-semibold text-emerald-900">
+                  Fecha de análisis:
+                  <select
+                    className="ml-2 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    onChange={(e) => onDateChange(Number(e.target.value))}
+                    value={acquisitionId ?? ''}
+                  >
+                    {availableDates.map((date) => (
+                      <option key={date.acquisition_id} value={date.acquisition_id}>
+                        {new Date(date.acquisition_date).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
+            <NDVIOverlayPreview acquisitionId={acquisitionId} showSatellite={showSatellite} satelliteData={satellite.data} satelliteOnly={satelliteOnly} />
           </div>
         </div>
       )}

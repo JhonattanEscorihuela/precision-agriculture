@@ -344,3 +344,176 @@ __table_args__ = (
 **Correcciones aplicadas:** tasks/correcciones_completadas.md  
 **Resultado:** Puntuación mejoró de 8.2/10 a 9.5/10
 
+---
+
+## Lección #16: Imagen Satelital True-Color como Capa de Fondo (2026-08-12)
+
+### 🎯 Feature implementada
+Agregar imagen RGB true-color de Sentinel Hub como capa de fondo bajo overlays NDVI/Textura, con toggles para controlar visualización.
+
+### 🔴 Problema 1: Georreferencia faltante en PNG RGB de Process API
+
+**Error:** PNG descargado de Process API no tiene metadatos geoespaciales  
+**Consecuencia:** `geometry_mask()` no podía aplicar máscara del polígono → imagen completamente negra (1KB)  
+**Root cause:** Sentinel Hub Process API solo devuelve georreferencia en TIFF multi-banda, NO en PNG RGB  
+**Solución:** Usar georreferencia del NDVI TIFF (que sí la tiene) para aplicar máscara al RGB PNG
+
+```python
+# ❌ MAL: Intentar abrir PNG RGB con rasterio (no tiene georreferencia)
+with rasterio.open(io.BytesIO(rgb_png_bytes)) as src:
+    transform = src.transform  # ← Identidad inútil
+
+# ✅ BIEN: Usar georreferencia del NDVI TIFF
+with rasterio.open(io.BytesIO(ndvi_tiff_bytes)) as src:
+    transform = src.transform  # ← Transform correcto
+    polygon_mask = geometry_mask([polygon_geojson], transform=transform, ...)
+```
+
+**Lección:** Process API limitations varían según formato. Siempre verificar si el formato elegido soporta metadatos geoespaciales. Para RGB usar PNG + georreferencia de otro source.
+
+---
+
+### 🔴 Problema 2: CSS z-index negativo hace imagen invisible
+
+**Error:** `z-index: -1` para imagen satelital → se renderiza detrás del contenedor padre → invisible  
+**Síntoma:** Usuario ve capa blanca transparente en vez de la imagen  
+**Consecuencia:** 8 iteraciones de prueba y error con diferentes CSS layouts  
+**Solución:** Layering DENTRO del mismo contenedor usando posicionamiento absoluto sin z-index negativo
+
+```tsx
+// ❌ MAL: z-index negativo la esconde
+<img style={{ zIndex: -1 }} />
+
+// ✅ BIEN: Ambos dentro del mismo contenedor, overlay encima
+<div className="relative aspect-square">
+  <img className="absolute inset-0" />  {/* Fondo */}
+  <Image style={{ opacity: 0.7 }} />   {/* Overlay */}
+</div>
+```
+
+**Lección:** z-index negativo rara vez es la solución correcta. Para layering, usar mismo contenedor + posicionamiento absoluto + order correcto en DOM.
+
+---
+
+### 🟡 Problema 3: Hook no reactivo a cambios de acquisitionId
+
+**Error:** Cambiar fecha en selector no actualizaba imagen satelital hasta F5  
+**Causa:** `useSatelliteImage` solo verificaba caché en useEffect pero no descargaba automáticamente  
+**Consecuencia:** UX rota, usuario confundido viendo imagen de fecha anterior  
+**Solución:** useCallback + auto-load si no está en caché
+
+```typescript
+// ❌ MAL: Solo verifica caché
+useEffect(() => {
+  const cached = getCachedSatelliteImage(acquisitionId);
+  if (cached) setData(cached);
+}, [acquisitionId]);
+
+// ✅ BIEN: Auto-descarga si no está en caché
+useEffect(() => {
+  const cached = getCachedSatelliteImage(acquisitionId);
+  if (cached) {
+    setData(cached);
+  } else {
+    void load(false);  // Auto-load
+  }
+}, [acquisitionId, load]);
+```
+
+**Lección:** Hooks deben ser completamente reactivos a sus inputs. Si un prop cambia, el hook debe reflejar ese cambio automáticamente, ya sea desde caché o descarga nueva.
+
+---
+
+### 🟡 Problema 4: Selector de fecha solo cambiaba imagen, no análisis
+
+**Error:** Selector cambiaba `satelliteAcquisitionId` pero NDVI/textura seguían mostrando fecha más reciente  
+**Causa:** Análisis cargados por `useParcelAnalysis` que siempre traía `limit: 1` (más reciente)  
+**Consecuencia:** Imagen de una fecha pero análisis de otra → datos inconsistentes  
+**Solución:** Mover gestión de fecha seleccionada a ParcelAnalysisWidgets, recargar todos los análisis cuando cambia
+
+```typescript
+// ❌ MAL: Solo cambiar imagen satelital
+<SegmentationPanel 
+  acquisitionId={latestNDVI.data?.acquisition_id}  // Siempre el más reciente
+  satelliteAcquisitionId={selectedDate}  // Cambiable
+/>
+
+// ✅ BIEN: Cambiar TODO cuando cambia fecha
+const [selectedDate, setSelectedDate] = useState<NDVISummary | null>(null);
+
+useEffect(() => {
+  if (selectedDate) {
+    loadSegmentation(selectedDate.ndvi_result_id);
+    loadTexture(selectedDate.ndvi_result_id);
+    // La imagen satelital se actualiza automáticamente por hook reactivo
+  }
+}, [selectedDate]);
+```
+
+**Lección:** Cuando un selector controla visualización de datos, debe cambiar TODOS los datos relacionados, no solo uno. Mantener consistencia entre overlay, análisis e imagen de fondo.
+
+---
+
+### ✅ Patrones exitosos aplicados
+
+1. **Caché en BD para imágenes costosas**  
+   - PNG RGB satelital guardado como bytea en columna `satellite_png`  
+   - Evita re-descarga de Sentinel Hub (quota limits)  
+   - Invalidación de caché con parámetro `force=true`
+
+2. **Deduplicación en context con Map**  
+   - `satelliteCache: Map<acquisitionId, imageData>`  
+   - Previene requests duplicados mientras uno está en vuelo  
+   - Consistente con overlayCache existente
+
+3. **Componente de preview con props condicionales**  
+   - `showSatellite`, `satelliteData`, `satelliteOnly` opcionales  
+   - Componente funciona sin satélite (retrocompatible)  
+   - Layering dentro del componente, no afuera
+
+4. **Estado compartido entre widgets**  
+   - Selector de fecha compartido (Segmentación + Textura)  
+   - Un solo estado en parent, props down  
+   - Sincronización automática
+
+5. **Progressive enhancement**  
+   - Checkbox 1: Mostrar imagen satélite  
+   - Checkbox 2: Solo imagen (aparece solo si checkbox 1 activo)  
+   - Selector fecha: Aparece solo si hay múltiples fechas  
+   - UX limpia sin cluttering
+
+---
+
+### 📋 Checklist para futuras features de visualización
+
+**Antes de implementar overlays/capas:**
+- [ ] Verificar qué formato (PNG/TIFF/GeoJSON) tiene georreferencia
+- [ ] Usar formato con metadata espacial como source of truth para máscaras
+- [ ] Layering CSS dentro de mismo contenedor, no con posicionamiento externo
+- [ ] Hooks completamente reactivos (caché + auto-load)
+- [ ] Cambio de selector actualiza TODOS los datos relacionados
+- [ ] Estado compartido en parent cuando múltiples componentes lo necesitan
+- [ ] Progressive enhancement (features aparecen solo cuando relevantes)
+- [ ] Caché de datos costosos (API externa, cálculos pesados)
+- [ ] Limpieza de logs/debug antes de commit
+
+---
+
+### 🎯 Resultado final
+
+**Implementado:**
+- ✅ Imagen RGB true-color como capa de fondo (OE2 + OE4)
+- ✅ Toggle "Imagen satélite" para mostrar/ocultar
+- ✅ Toggle "Solo imagen" para ver foto sin overlay
+- ✅ Selector de fecha sincronizado (cambia NDVI + textura + imagen)
+- ✅ Caché de imágenes en BD con column `satellite_png`
+- ✅ Hook completamente reactivo a cambios de fecha
+- ✅ Código limpio sin logs de debug
+
+**UX lograda:**
+- Usuario ve overlay NDVI/textura sobre foto real del campo
+- Puede ocultar overlay para ver solo la foto
+- Puede cambiar fecha para ver análisis de días diferentes
+- Imagen satelital se actualiza automáticamente sin F5
+- Útil para identificar fechas con nubes y elegir mejor imagen de referencia
+

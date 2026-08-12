@@ -3,8 +3,17 @@
 import Image from 'next/image';
 import { useNDVIOverlayPreview } from '@/app/hooks/useOverlayPreview';
 
+interface SatelliteData {
+  image_base64: string;
+  bounds: [[number, number], [number, number]];
+  cached: boolean;
+}
+
 interface NDVIOverlayPreviewProps {
   acquisitionId?: number | null;
+  showSatellite?: boolean;
+  satelliteData?: SatelliteData | null;
+  satelliteOnly?: boolean;
 }
 
 const legend = [
@@ -13,7 +22,7 @@ const legend = [
   { label: 'Crítico (< 0.3)', color: 'bg-red-600' },
 ];
 
-export default function NDVIOverlayPreview({ acquisitionId }: NDVIOverlayPreviewProps) {
+export default function NDVIOverlayPreview({ acquisitionId, showSatellite, satelliteData, satelliteOnly }: NDVIOverlayPreviewProps) {
   const preview = useNDVIOverlayPreview(acquisitionId);
 
   if (preview.status === 'loading') {
@@ -45,12 +54,20 @@ export default function NDVIOverlayPreview({ acquisitionId }: NDVIOverlayPreview
         </button>
       </div>
       <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-emerald-200 bg-white">
+        {showSatellite && satelliteData && (
+          <img
+            alt="Imagen satélite de fondo"
+            className="absolute inset-0 h-full w-full object-contain"
+            src={satelliteData.image_base64}
+          />
+        )}
         <Image
           alt="Mapa NDVI coloreado de la parcela"
           className="object-contain"
           fill
           sizes="(min-width: 1024px) 40vw, 90vw"
           src={preview.data.image_base64}
+          style={satelliteOnly ? { opacity: 0 } : (showSatellite && satelliteData ? { opacity: 0.7 } : undefined)}
           unoptimized
         />
         {preview.isRefreshing && <div aria-hidden="true" className="absolute inset-0 animate-pulse bg-white/20" />}

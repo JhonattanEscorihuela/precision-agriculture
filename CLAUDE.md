@@ -99,6 +99,18 @@ La validación se distribuye como evidencia medible en cada OE.
 - ✅ `numpy==1.24.3` - Cálculo NDVI
 - ✅ `rasterio==1.4.3` - Lectura/escritura TIFF
 
+**Imagen Satelital (2026-08-12):**
+- ✅ Endpoint `/ndvi/overlay/satellite-image?acquisition_id=N` - Descarga RGB true-color
+- ✅ Servicio `satellite_image_service.py` - Generación PNG con máscara usando georreferencia NDVI
+- ✅ Caché de imágenes satelitales en columna `satellite_png` de `ndvi_result`
+- ✅ Hook `useSatelliteImage` - Descarga reactiva con caché automático
+- ✅ Context `OverlayContext` - Deduplicación de requests satelitales
+- ✅ Toggle "Imagen satélite" en widgets Segmentación y Textura
+- ✅ Toggle "Solo imagen" para ver foto sin overlay
+- ✅ Selector de fecha sincronizado (cambia NDVI + textura + imagen satelital)
+- ✅ Layering CSS con overlay semi-transparente sobre foto real
+- ✅ Integración Process API para descarga RGB PNG de Sentinel Hub
+
 ### OE3 — Analizar segmentación espacial
 - ✅ Prototipo filtro convolucional en notebook
 - 🔧 PENDIENTE: Migrar a servicio + endpoints + widget dashboard
@@ -114,6 +126,8 @@ La validación se distribuye como evidencia medible en cada OE.
 - ✅ Panel visualización NDVI (OE2 frontend)
 - ✅ Dashboard individual por parcela con widgets (patrón AWS CloudWatch)
 - ✅ Estado de salud basado en datos reales
+- ✅ Imagen satelital RGB como capa de fondo en widgets
+- ✅ Selector de fecha con recarga sincronizada de análisis
 - 🔧 PENDIENTE: Comparación temporal multi-fecha, exportación reportes
 
 ---

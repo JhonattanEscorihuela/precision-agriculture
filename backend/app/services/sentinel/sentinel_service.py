@@ -187,9 +187,9 @@ class SentinelService:
             polygon_id: ID del polígono (para logging)
 
         Returns:
-            bytes: Contenido del PNG
+            bytes: Contenido del TIFF georreferenciado
         """
-        return await self.process_client.download_true_color(
+        return await self.process_client.download_true_color_tiff(
             polygon_geojson=polygon_geojson,
             start_date=start_date,
             end_date=end_date,

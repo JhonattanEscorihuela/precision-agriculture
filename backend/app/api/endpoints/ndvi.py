@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 import io
+import logging
 
 from app.database import get_session
 from app.models.user import User
@@ -24,6 +25,7 @@ from app.crud import polygon as crud_polygon
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ⚠️ ORDEN CRÍTICO: Registrar rutas específicas ANTES de las genéricas
@@ -517,37 +519,35 @@ async def get_satellite_image(
             "coordinates": [polygon.coordinates]
         }
 
+        # Convertir fecha de adquisición a string (puede ser date o str)
+        acq_date_str = str(acquisition.acquisition_date) if not isinstance(acquisition.acquisition_date, str) else acquisition.acquisition_date
+
         # 5. Cache check
         if ndvi_result.satellite_png and not force:
-            # Servir desde caché
             png_bytes = ndvi_result.satellite_png
-            # Re-extraer bounds desde el TIFF NDVI (mismos bounds)
             with rasterio.open(io.BytesIO(ndvi_result.ndvi_tiff)) as src:
                 bounds = array_bounds(src.height, src.width, src.transform)
                 leaflet_bounds = [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
             cached = True
         else:
-            # 6. Descargar imagen true color de Sentinel Hub
             sentinel_service = SentinelService()
 
-            # Usar misma fecha y bbox que la adquisición original
-            # TIFF RGB (3 bandas UINT8) georreferenciado
-            tiff_rgb_bytes = await sentinel_service.download_true_color_tiff(
+            rgb_png_bytes = await sentinel_service.download_true_color(
                 polygon_geojson=polygon_geojson,
-                start_date=acquisition.acquisition_date.strftime("%Y-%m-%d"),
-                end_date=acquisition.acquisition_date.strftime("%Y-%m-%d"),
+                start_date=acq_date_str,
+                end_date=acq_date_str,
                 width=512,
                 height=512,
                 max_cloud_coverage=20,
                 polygon_id=polygon.id
             )
 
-            # 7. Generar PNG con máscara de polígono
             png_bytes, leaflet_bounds = generate_satellite_png(
-                tiff_rgb_bytes, polygon_geojson
+                rgb_png_bytes=rgb_png_bytes,
+                ndvi_tiff_bytes=ndvi_result.ndvi_tiff,
+                polygon_geojson=polygon_geojson
             )
 
-            # 8. Guardar en cache
             await crud_ndvi.update_satellite_cache(db, ndvi_result.id, png_bytes)
             cached = False
 
@@ -560,7 +560,7 @@ async def get_satellite_image(
             "bounds": leaflet_bounds,
             "cached": cached,
             "metadata": {
-                "date": str(acquisition.acquisition_date.date()),
+                "date": acq_date_str,
                 "polygon_id": ndvi_result.polygon_id,
                 "type": "true_color"
             }

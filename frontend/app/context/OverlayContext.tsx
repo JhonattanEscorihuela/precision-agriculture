@@ -17,6 +17,17 @@ import type {
   TextureOverlayResponse,
 } from '@/lib/overlayTypes';
 
+interface SatelliteImageResponse {
+  image_base64: string;
+  bounds: [[number, number], [number, number]];
+  cached: boolean;
+  metadata: {
+    date: string;
+    polygon_id: number;
+    type: 'true_color';
+  };
+}
+
 interface OverlayContextValue {
   textureKernel: TextureKernelType;
   setTextureKernel: (kernel: TextureKernelType) => void;
@@ -25,12 +36,14 @@ interface OverlayContextValue {
     ndviResultId: number,
     kernel: TextureKernelType
   ) => TextureOverlayResponse | null;
+  getCachedSatelliteImage: (acquisitionId: number) => SatelliteImageResponse | null;
   fetchNDVIOverlay: (acquisitionId: number, force?: boolean) => Promise<NDVIOverlayResponse>;
   fetchTextureOverlay: (
     ndviResultId: number,
     kernel: TextureKernelType,
     force?: boolean
   ) => Promise<TextureOverlayResponse>;
+  fetchSatelliteImage: (acquisitionId: number, force?: boolean) => Promise<SatelliteImageResponse>;
   showOverlayError: (message: string) => void;
 }
 
@@ -43,6 +56,7 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
   const generationRef = useRef(0);
   const ndviCache = useRef(new Map<number, NDVIOverlayResponse>());
   const textureCache = useRef(new Map<string, TextureOverlayResponse>());
+  const satelliteCache = useRef(new Map<number, SatelliteImageResponse>());
   const inFlight = useRef(new Map<string, Promise<unknown>>());
   const writeVersions = useRef(new Map<string, number>());
   const [textureKernel, setTextureKernel] = useState<TextureKernelType>('contrast');
@@ -54,6 +68,7 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
     generationRef.current += 1;
     ndviCache.current.clear();
     textureCache.current.clear();
+    satelliteCache.current.clear();
     inFlight.current.clear();
     writeVersions.current.clear();
   }, [ownerId]);
@@ -78,6 +93,11 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
   const getCachedTextureOverlay = useCallback((id: number, kernel: TextureKernelType) => {
     ensureOwner();
     return textureCache.current.get(`${id}:${kernel}`) ?? null;
+  }, [ensureOwner]);
+
+  const getCachedSatelliteImage = useCallback((acquisitionId: number) => {
+    ensureOwner();
+    return satelliteCache.current.get(acquisitionId) ?? null;
   }, [ensureOwner]);
 
   const fetchNDVIOverlay = useCallback(async (id: number, force = false) => {
@@ -141,14 +161,45 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
     return request;
   }, [ensureOwner]);
 
+  const fetchSatelliteImage = useCallback(async (acquisitionId: number, force = false) => {
+    ensureOwner();
+    const cached = satelliteCache.current.get(acquisitionId);
+    if (cached && !force) return cached;
+    const requestKey = `satellite:${acquisitionId}:${force ? 'force' : 'normal'}`;
+    const pending = inFlight.current.get(requestKey) as Promise<SatelliteImageResponse> | undefined;
+    if (pending) return pending;
+    const cacheKey = `satellite:${acquisitionId}`;
+    const version = (writeVersions.current.get(cacheKey) ?? 0) + 1;
+    const generation = generationRef.current;
+    writeVersions.current.set(cacheKey, version);
+    const request = apiClient
+      .get<SatelliteImageResponse>(`/api/ndvi/${acquisitionId}/satellite-image`, {
+        params: { force },
+      })
+      .then(({ data }) => {
+        if (generation === generationRef.current && writeVersions.current.get(cacheKey) === version) {
+          satelliteCache.current.set(acquisitionId, data);
+        }
+        return data;
+      });
+    inFlight.current.set(requestKey, request);
+    const clearRequest = () => {
+      if (inFlight.current.get(requestKey) === request) inFlight.current.delete(requestKey);
+    };
+    void request.then(clearRequest, clearRequest);
+    return request;
+  }, [ensureOwner]);
+
   return (
     <OverlayContext.Provider value={{
       textureKernel,
       setTextureKernel,
       getCachedNDVIOverlay,
       getCachedTextureOverlay,
+      getCachedSatelliteImage,
       fetchNDVIOverlay,
       fetchTextureOverlay,
+      fetchSatelliteImage,
       showOverlayError,
     }}>
       {children}

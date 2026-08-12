@@ -63,7 +63,7 @@ function evaluatePixel(sample) {
 
 def build_true_color_evalscript() -> str:
     """
-    Construye evalscript para imagen RGB true-color.
+    Construye evalscript para imagen RGB true-color PNG.
 
     Returns:
         str: Evalscript RGB
@@ -85,6 +85,37 @@ function evaluatePixel(sample) {
   const g = Math.min(255, Math.max(0, 255 * sample.B03 / 0.3));
   const b = Math.min(255, Math.max(0, 255 * sample.B02 / 0.3));
   return [r, g, b];
+}
+"""
+
+
+def build_true_color_tiff_evalscript() -> str:
+    """
+    Construye evalscript para imagen RGB true-color TIFF georreferenciado.
+
+    Sentinel Hub requiere FLOAT32 para TIFFs georreferenciados.
+    Los valores se normalizan [0, 1] y luego se convierten a UINT8 al leer.
+
+    Returns:
+        str: Evalscript RGB para TIFF
+    """
+    return """
+//VERSION=3
+function setup() {
+  return {
+    input: ["B02", "B03", "B04", "dataMask"],
+    output: {
+      bands: 4,
+      sampleType: "FLOAT32"
+    }
+  }
+}
+function evaluatePixel(sample) {
+  // Normalizar reflectancia [0, 0.3] a [0, 1] para FLOAT32
+  const r = Math.min(1, Math.max(0, sample.B04 / 0.3));
+  const g = Math.min(1, Math.max(0, sample.B03 / 0.3));
+  const b = Math.min(1, Math.max(0, sample.B02 / 0.3));
+  return [r, g, b, sample.dataMask];
 }
 """
 

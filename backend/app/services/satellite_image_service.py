@@ -14,14 +14,19 @@ from typing import Tuple, List
 
 
 def generate_satellite_png(
-    tiff_bytes: bytes,
+    rgb_png_bytes: bytes,
+    ndvi_tiff_bytes: bytes,
     polygon_geojson: dict
 ) -> Tuple[bytes, List[List[float]]]:
     """
-    Convierte TIFF RGB true color a PNG RGBA con máscara de polígono.
+    Convierte PNG RGB a PNG RGBA con máscara de polígono.
+
+    Usa la georreferencia del NDVI TIFF (que sí tiene transform correcto)
+    para aplicar la máscara al RGB PNG (que no tiene georreferencia).
 
     Args:
-        tiff_bytes: Bytes del archivo TIFF RGB (3 bandas UINT8)
+        rgb_png_bytes: Bytes del PNG RGB sin georreferencia
+        ndvi_tiff_bytes: Bytes del NDVI TIFF (para extraer transform)
         polygon_geojson: Geometría del polígono en formato GeoJSON
                          {"type": "Polygon", "coordinates": [[[lng, lat], ...]]}
 
@@ -30,19 +35,13 @@ def generate_satellite_png(
         - png_bytes: Imagen PNG RGBA en bytes (solo polígono visible)
         - leaflet_bounds: [[lat_south, lng_west], [lat_north, lng_east]]
     """
-    # 1. Abrir TIFF y leer 3 bandas RGB
-    with rasterio.open(io.BytesIO(tiff_bytes)) as src:
-        # Leer bandas R, G, B
-        r = src.read(1)
-        g = src.read(2)
-        b = src.read(3)
+    # 1. Extraer georreferencia del NDVI TIFF (que SÍ la tiene)
+    with rasterio.open(io.BytesIO(ndvi_tiff_bytes)) as src:
         transform = src.transform
-
-        # Extraer bounds georreferenciados
         bounds = array_bounds(src.height, src.width, transform)
         leaflet_bounds = [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
 
-        # Crear máscara del polígono
+        # Crear máscara del polígono usando transform del NDVI
         polygon_mask = geometry_mask(
             [polygon_geojson],
             out_shape=(src.height, src.width),
@@ -50,7 +49,21 @@ def generate_satellite_png(
             invert=True  # True = dentro del polígono
         )
 
-    # 2. Crear imagen RGBA
+    # 2. Abrir RGB PNG y convertir a array
+    img = Image.open(io.BytesIO(rgb_png_bytes))
+    rgb_arr = np.array(img)
+
+    # Si es RGBA, tomar solo RGB
+    if rgb_arr.shape[2] == 4:
+        r = rgb_arr[:, :, 0]
+        g = rgb_arr[:, :, 1]
+        b = rgb_arr[:, :, 2]
+    else:
+        r = rgb_arr[:, :, 0]
+        g = rgb_arr[:, :, 1]
+        b = rgb_arr[:, :, 2]
+
+    # 3. Crear imagen RGBA
     h, w = r.shape
     rgba = np.zeros((h, w, 4), dtype=np.uint8)
 
@@ -62,10 +75,10 @@ def generate_satellite_png(
 
     # Píxeles fuera del polígono → transparente (alpha=0, ya es default)
 
-    # 3. Crear PNG con optimización
-    img = Image.fromarray(rgba, mode='RGBA')
+    # 4. Crear PNG con optimización
+    result_img = Image.fromarray(rgba, mode='RGBA')
     buffer = io.BytesIO()
-    img.save(buffer, format='PNG', optimize=True)
+    result_img.save(buffer, format='PNG', optimize=True)
     png_bytes = buffer.getvalue()
 
     return png_bytes, leaflet_bounds
