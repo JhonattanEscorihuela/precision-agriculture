@@ -252,7 +252,13 @@ async def get_texture_overlay(
         result = await db.execute(query)
         acquisition_date = result.scalar_one_or_none()
 
-        # 4. Cache check
+        # 4. Preparar geometría del polígono para máscara
+        polygon_geojson = {
+            "type": "Polygon",
+            "coordinates": [polygon.coordinates]  # polygon.coordinates ya es [[lng, lat], ...]
+        }
+
+        # 5. Cache check
         cached_overlay = await crud_overlay.get_cached_overlay(db, ndvi_result_id, kernel)
 
         if cached_overlay and not force:
@@ -260,15 +266,15 @@ async def get_texture_overlay(
             png_bytes = cached_overlay.overlay_png
             interpretation = cached_overlay.interpretation
             # Re-generar bounds desde el TIFF
-            _, leaflet_bounds, _ = generate_texture_overlay(ndvi_result.ndvi_tiff, kernel)
+            _, leaflet_bounds, _ = generate_texture_overlay(ndvi_result.ndvi_tiff, kernel, polygon_geojson)
             cached = True
         else:
-            # 5. Generar overlay
+            # 6. Generar overlay con máscara de polígono
             png_bytes, leaflet_bounds, interpretation = generate_texture_overlay(
-                ndvi_result.ndvi_tiff, kernel
+                ndvi_result.ndvi_tiff, kernel, polygon_geojson
             )
 
-            # 6. Guardar en cache (crea o actualiza)
+            # 7. Guardar en cache (crea o actualiza)
             await crud_overlay.save_overlay_cache(
                 db, ndvi_result_id, kernel, png_bytes, interpretation
             )

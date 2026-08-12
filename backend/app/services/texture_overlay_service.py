@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image
 import rasterio
 from rasterio.transform import array_bounds
+from rasterio.features import geometry_mask
 from scipy.ndimage import convolve
 from typing import Tuple, List
 
@@ -40,34 +41,46 @@ KERNELS = {
 
 def generate_texture_overlay(
     ndvi_tiff_bytes: bytes,
-    kernel_name: str
+    kernel_name: str,
+    polygon_geojson: dict
 ) -> Tuple[bytes, List[List[float]], str]:
     """
-    Aplica kernel de textura al NDVI y genera PNG coloreado.
+    Aplica kernel de textura al NDVI y genera PNG coloreado con recorte a la forma del polígono.
 
     Paleta de colores (variabilidad — frío/cálido):
     - Azul (#3b82f6): Percentil 0-33 (Uniforme)
     - Púrpura (#8b5cf6): Percentil 33-66 (Moderado)
     - Naranja (#f97316): Percentil 66-100 (Heterogéneo)
-    - Transparente: píxeles inválidos
+    - Transparente: píxeles inválidos/fuera del polígono
 
     Args:
         ndvi_tiff_bytes: Bytes del archivo TIFF NDVI
         kernel_name: "contrast", "edges", o "homogeneity"
+        polygon_geojson: Geometría del polígono en formato GeoJSON
+                         {"type": "Polygon", "coordinates": [[[lng, lat], ...]]}
 
     Returns:
         Tupla (png_bytes, leaflet_bounds, interpretation)
-        - png_bytes: Imagen PNG RGBA en bytes
+        - png_bytes: Imagen PNG RGBA en bytes (solo polígono coloreado)
         - leaflet_bounds: [[lat_south, lng_west], [lat_north, lng_east]]
         - interpretation: Texto explicativo según kernel y valores
     """
     # 1. Abrir TIFF y leer datos
     with rasterio.open(io.BytesIO(ndvi_tiff_bytes)) as src:
         ndvi = src.read(1).astype(np.float32)
+        transform = src.transform
 
         # Extraer bounds georreferenciados
-        bounds = array_bounds(src.height, src.width, src.transform)
+        bounds = array_bounds(src.height, src.width, transform)
         leaflet_bounds = [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
+
+        # Crear máscara del polígono
+        polygon_mask = geometry_mask(
+            [polygon_geojson],
+            out_shape=(src.height, src.width),
+            transform=transform,
+            invert=True  # True = dentro del polígono
+        )
 
     # 2. Preparar array (reemplazar NaN con 0 para convolución)
     ndvi_clean = np.nan_to_num(ndvi, nan=0.0)
@@ -90,8 +103,8 @@ def generate_texture_overlay(
     else:
         raise ValueError(f"Unknown kernel: {kernel_name}")
 
-    # 4. Máscara de datos válidos (misma que NDVI)
-    valid = ~np.isnan(ndvi) & (ndvi >= -1) & (ndvi <= 1)
+    # 4. Máscara de datos válidos (misma que NDVI) Y dentro del polígono
+    valid = ~np.isnan(ndvi) & (ndvi >= -1) & (ndvi <= 1) & polygon_mask
 
     # 5. Calcular percentiles sobre píxeles válidos
     valid_values = texture_result[valid]
