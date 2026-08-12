@@ -407,3 +407,169 @@ async def get_ndvi_overlay(
             status_code=500,
             detail=f"Error generating NDVI overlay: {str(e)}"
         )
+
+
+@router.get(
+    "/{acquisition_id}/satellite-image",
+    responses={
+        200: {
+            "description": "Imagen satelital RGB true color para visualización",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "image_base64": "data:image/png;base64,iVBORw0KG...",
+                        "bounds": [[8.838, -67.528], [8.853, -67.515]],
+                        "cached": True,
+                        "metadata": {
+                            "date": "2026-03-22",
+                            "polygon_id": 10,
+                            "type": "true_color"
+                        }
+                    }
+                }
+            }
+        },
+        404: {"model": NDVIErrorResponse, "description": "NDVI/Acquisition not found"},
+        403: {"model": NDVIErrorResponse, "description": "Access denied"}
+    }
+)
+async def get_satellite_image(
+    acquisition_id: int,
+    force: bool = False,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene imagen satelital RGB true color para una adquisición.
+
+    **Workflow:**
+    1. Busca NDVIResult por acquisition_id
+    2. Verifica ownership del polígono
+    3. Si existe cache (satellite_png) y no force → retorna desde caché
+    4. Si no existe cache o force=true:
+       - Descarga imagen true color de Sentinel Hub
+       - Aplica máscara de polígono (transparente fuera)
+       - Guarda en cache (campo satellite_png)
+    5. Retorna base64 + bounds + metadata
+
+    **Cache policy:**
+    - Primera llamada: descarga y guarda (cached=false)
+    - Siguientes llamadas: sirve desde cache (cached=true)
+    - Query param ?force=true: recalcula y actualiza cache
+
+    **Uso:** Capa de fondo en widgets de Segmentación y Textura
+
+    Args:
+        acquisition_id: ID de la adquisición
+        force: Forzar recálculo aunque exista caché (default: False)
+        db: Sesión de base de datos
+        current_user: Usuario autenticado (JWT)
+
+    Returns:
+        JSON con image_base64, bounds, cached flag y metadata
+
+    Raises:
+        HTTPException 404: Si no existe adquisición/NDVI
+        HTTPException 403: Si no tiene acceso
+        HTTPException 500: Si hay error descargando/generando imagen
+    """
+    import base64
+    from app.services.satellite_image_service import generate_satellite_png
+    from app.services.sentinel.sentinel_service import SentinelService
+    from app.models.acquisition import SentinelAcquisition
+    from sqlalchemy import select
+    import rasterio
+    from rasterio.transform import array_bounds
+    import io
+
+    try:
+        # 1. Buscar NDVIResult
+        ndvi_result = await crud_ndvi.get_ndvi_by_acquisition(db, acquisition_id)
+        if not ndvi_result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"NDVI not calculated for acquisition_id={acquisition_id}"
+            )
+
+        # 2. Verificar ownership del polígono
+        polygon = await crud_polygon.get_polygon_by_id(db, ndvi_result.polygon_id)
+        if not polygon or polygon.user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have access to this NDVI result"
+            )
+
+        # 3. Obtener fecha de adquisición
+        query = select(SentinelAcquisition).where(
+            SentinelAcquisition.id == acquisition_id
+        )
+        result = await db.execute(query)
+        acquisition = result.scalar_one_or_none()
+        if not acquisition:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Acquisition not found with id={acquisition_id}"
+            )
+
+        # 4. Preparar geometría del polígono para máscara
+        polygon_geojson = {
+            "type": "Polygon",
+            "coordinates": [polygon.coordinates]
+        }
+
+        # 5. Cache check
+        if ndvi_result.satellite_png and not force:
+            # Servir desde caché
+            png_bytes = ndvi_result.satellite_png
+            # Re-extraer bounds desde el TIFF NDVI (mismos bounds)
+            with rasterio.open(io.BytesIO(ndvi_result.ndvi_tiff)) as src:
+                bounds = array_bounds(src.height, src.width, src.transform)
+                leaflet_bounds = [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
+            cached = True
+        else:
+            # 6. Descargar imagen true color de Sentinel Hub
+            sentinel_service = SentinelService()
+
+            # Usar misma fecha y bbox que la adquisición original
+            # TIFF RGB (3 bandas UINT8) georreferenciado
+            tiff_rgb_bytes = await sentinel_service.download_true_color_tiff(
+                polygon_geojson=polygon_geojson,
+                start_date=acquisition.acquisition_date.strftime("%Y-%m-%d"),
+                end_date=acquisition.acquisition_date.strftime("%Y-%m-%d"),
+                width=512,
+                height=512,
+                max_cloud_coverage=20,
+                polygon_id=polygon.id
+            )
+
+            # 7. Generar PNG con máscara de polígono
+            png_bytes, leaflet_bounds = generate_satellite_png(
+                tiff_rgb_bytes, polygon_geojson
+            )
+
+            # 8. Guardar en cache
+            await crud_ndvi.update_satellite_cache(db, ndvi_result.id, png_bytes)
+            cached = False
+
+        # 9. Codificar a base64
+        image_b64 = f"data:image/png;base64,{base64.b64encode(png_bytes).decode()}"
+
+        # 10. Respuesta
+        return {
+            "image_base64": image_b64,
+            "bounds": leaflet_bounds,
+            "cached": cached,
+            "metadata": {
+                "date": str(acquisition.acquisition_date.date()),
+                "polygon_id": ndvi_result.polygon_id,
+                "type": "true_color"
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating satellite image: {str(e)}"
+        )
