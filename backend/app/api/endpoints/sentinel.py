@@ -477,6 +477,7 @@ async def get_available_dates(
 
         # Mapear acquisition_id por fecha para consultar NDVIs
         acquisition_id_by_date = {acq.acquisition_date: acq.id for acq in acquisitions}
+        acquisition_by_date = {acq.acquisition_date: acq for acq in acquisitions}
 
         # Obtener NDVIs ya calculados (bulk query - resuelve N+1)
         from app.crud.ndvi import get_ndvi_by_acquisitions_bulk
@@ -490,10 +491,16 @@ async def get_available_dates(
         # Marcar fechas adquiridas y con NDVI calculado
         date_infos = []
         for d in dates:
+            acquisition = acquisition_by_date.get(d["date"])
             date_infos.append(DateInfo(
                 **d,
                 acquired=(d["date"] in acquired_dates),
-                ndvi_calculated=(d["date"] in ndvi_calculated_dates)
+                ndvi_calculated=(d["date"] in ndvi_calculated_dates),
+                parcel_cloud_cover=(acquisition.parcel_cloud_cover if acquisition else None),
+                parcel_shadow_cover=(acquisition.parcel_shadow_cover if acquisition else None),
+                valid_pixel_percentage=(acquisition.valid_pixel_percentage if acquisition else None),
+                usable_pixel_percentage=(acquisition.usable_pixel_percentage if acquisition else None),
+                quality_status=(acquisition.quality_status if acquisition else None),
             ))
 
         return AvailableDatesResponse(
@@ -581,7 +588,8 @@ async def acquire_bands(
             db_session=db,
             width=request.width,
             height=request.height,
-            max_cloud_coverage=20
+            max_cloud_coverage=20,
+            scene_id=request.scene_id
         )
 
         logger.info(f"✅ [acquire_bands] Success - acquisition_id={result.get('acquisition_id')}, already_existed={result.get('already_existed', False)}")

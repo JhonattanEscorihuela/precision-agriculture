@@ -7,6 +7,12 @@ interface DateBadgeProps {
   isSelected: boolean;
   isAcquired: boolean;
   ndviCalculated?: boolean;
+  sceneCloudCover: number;
+  parcelCloudCover: number | null;
+  parcelShadowCover: number | null;
+  validPixelPercentage: number | null;
+  usablePixelPercentage: number | null;
+  qualityStatus: 'suitable' | 'caution' | 'unsuitable' | null;
   onClick: () => void;
 }
 
@@ -18,17 +24,41 @@ interface DateBadgeProps {
  * - Azul: Bandas adquiridas (isAcquired=true, sin NDVI)
  * - Gris: Solo disponible (necesita adquirir primero)
  */
-export default function DateBadge({ date, isSelected, isAcquired, ndviCalculated, onClick }: DateBadgeProps) {
+export default function DateBadge({
+  date,
+  isSelected,
+  isAcquired,
+  ndviCalculated,
+  sceneCloudCover,
+  parcelCloudCover,
+  parcelShadowCover,
+  validPixelPercentage,
+  usablePixelPercentage,
+  qualityStatus,
+  onClick,
+}: DateBadgeProps) {
   // Formatear fecha para mostrar solo día/mes
   const formatDate = (dateStr: string) => {
-    const [year, month, day] = dateStr.split('-');
+    const [, month, day] = dateStr.split('-');
     return `${day}/${month}`;
   };
 
   // Determinar color y badge según estado
   const getBadgeStyle = () => {
     if (isSelected) {
+      if (qualityStatus === 'unsuitable') {
+        return 'bg-red-600 text-white border-red-600 shadow-md';
+      }
+      if (qualityStatus === 'caution') {
+        return 'bg-amber-500 text-white border-amber-500 shadow-md';
+      }
       return 'bg-emerald-600 text-white border-emerald-600 shadow-md';
+    }
+    if (qualityStatus === 'unsuitable') {
+      return 'bg-red-50 text-red-700 border-red-400 hover:border-red-600';
+    }
+    if (qualityStatus === 'caution') {
+      return 'bg-amber-50 text-amber-800 border-amber-400 hover:border-amber-600';
     }
     if (ndviCalculated) {
       // Verde: NDVI calculado
@@ -74,18 +104,24 @@ export default function DateBadge({ date, isSelected, isAcquired, ndviCalculated
         transition-all duration-200 relative
         ${getBadgeStyle()}
       `}
-      title={
-        ndviCalculated
-          ? '✓ NDVI calculado'
-          : isAcquired
-          ? '✓ Bandas adquiridas'
-          : 'Disponible para adquirir'
-      }
+      title={parcelCloudCover !== null
+        ? `Parcela: ${parcelCloudCover.toFixed(1)}% nubes, ${(parcelShadowCover ?? 0).toFixed(1)}% sombra, ${(validPixelPercentage ?? 0).toFixed(1)}% datos válidos, ${(usablePixelPercentage ?? 0).toFixed(1)}% utilizables`
+        : `Escena completa: ${sceneCloudCover.toFixed(1)}% nubes. La nubosidad de parcela se calcula al adquirir.`}
     >
       {getBadgeIcon()}
       <div className="text-center">
         <div className="font-semibold">{formatDate(date)}</div>
         <div className="text-xs opacity-80">{date.split('-')[0]}</div>
+        <div className="mt-1 text-[10px] leading-tight opacity-90">
+          {parcelCloudCover !== null
+            ? `Parcela ${parcelCloudCover.toFixed(1)}%`
+            : `Escena ${sceneCloudCover.toFixed(1)}%`}
+        </div>
+        {qualityStatus && (
+          <div className="mt-1 text-[10px] font-semibold uppercase leading-tight">
+            {qualityStatus === 'suitable' ? 'Apta' : qualityStatus === 'caution' ? 'Precaución' : 'No apta'}
+          </div>
+        )}
       </div>
     </button>
   );

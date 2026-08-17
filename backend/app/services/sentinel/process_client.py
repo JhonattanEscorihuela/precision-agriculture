@@ -12,6 +12,7 @@ from .request_builder import (
     build_ndvi_evalscript,
     build_true_color_evalscript,
     build_true_color_tiff_evalscript,
+    build_scl_evalscript,
     build_check_availability_evalscript,
     build_process_request
 )
@@ -283,6 +284,44 @@ class ProcessClient:
             response.raise_for_status()
             return response.content
 
+    async def download_scene_classification(
+        self,
+        polygon_geojson: Dict,
+        start_date: str,
+        end_date: str,
+        width: int = 512,
+        height: int = 512,
+        max_cloud_coverage: int = 100,
+        polygon_id: Optional[int] = None
+    ) -> bytes:
+        """Descarga SCL y dataMask como GeoTIFF para calcular calidad por parcela."""
+        token = self.auth.ensure_authenticated()
+        request_payload = build_process_request(
+            polygon_geojson=polygon_geojson,
+            start_date=start_date,
+            end_date=end_date,
+            evalscript=build_scl_evalscript(),
+            width=width,
+            height=height,
+            max_cloud_coverage=max_cloud_coverage,
+            response_format="image/tiff"
+        )
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        log_request_details("DOWNLOAD_SCL", polygon_geojson, request_payload, polygon_id)
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                self.PROCESS_URL,
+                json=request_payload,
+                headers=headers
+            )
+            success = response.status_code == 200
+            log_response_details("DOWNLOAD_SCL", response, success)
+            response.raise_for_status()
+            return response.content
     async def check_availability(
         self,
         polygon_geojson: Dict,

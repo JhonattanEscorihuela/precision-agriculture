@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from app.crud import ndvi as crud_ndvi
 from app.crud import segmentation as crud_segmentation
 from app.crud import polygon as crud_polygon
+from app.crud import acquisition as crud_acquisition
 
 logger = logging.getLogger(__name__)
 
@@ -85,19 +86,13 @@ class SegmentationService:
             logger.error(f"❌ Threshold fuera de rango: {threshold}")
             raise ValueError(f"Threshold must be in range [0, 1], got {threshold}")
 
-        # 2. Verificar idempotencia
-        existing_segmentation = await crud_segmentation.get_by_ndvi_result_id(db, ndvi_result_id)
-        if existing_segmentation:
-            logger.info(f"✅ Segmentación ya existe (id={existing_segmentation.id}), retornando sin recalcular")
-            return self._format_response(existing_segmentation)
-
-        # 3. Obtener NDVIResult
+        # 2. Obtener NDVIResult
         ndvi_result = await crud_ndvi.get_ndvi_by_id(db, ndvi_result_id)
         if not ndvi_result:
             logger.error(f"❌ NDVIResult {ndvi_result_id} no encontrado")
             raise HTTPException(status_code=404, detail="NDVI result not found")
 
-        # 4. Verificar ownership
+        # 3. Verificar ownership antes de retornar resultados existentes.
         polygon = await crud_polygon.get_polygon_by_id(db, ndvi_result.polygon_id)
         if not polygon or polygon.user_id != user_id:
             logger.error(f"❌ Usuario {user_id} no tiene acceso a ndvi_result {ndvi_result_id}")
@@ -106,9 +101,32 @@ class SegmentationService:
                 detail="You don't have permission to access this NDVI result"
             )
 
+        # 4. Solo un NDVI SCL-enmascarado de una observación apta puede alimentar OE3.
+        acquisition = await crud_acquisition.get_acquisition_by_id(
+            db,
+            ndvi_result.acquisition_id,
+        )
+        if not ndvi_result.cloud_mask_applied:
+            raise HTTPException(
+                status_code=409,
+                detail="NDVI must be recalculated with the SCL cloud mask before OE3.",
+            )
+        if not acquisition or acquisition.quality_status != "suitable":
+            quality = acquisition.quality_status if acquisition else "unknown"
+            raise HTTPException(
+                status_code=409,
+                detail=f"Observation quality is {quality}; OE3 requires suitable quality.",
+            )
+
+        # 5. Verificar idempotencia después de seguridad y calidad.
+        existing_segmentation = await crud_segmentation.get_by_ndvi_result_id(db, ndvi_result_id)
+        if existing_segmentation:
+            logger.info(f"✅ Segmentación ya existe (id={existing_segmentation.id}), retornando sin recalcular")
+            return self._format_response(existing_segmentation)
+
         logger.info(f"📊 NDVI válido: polygon_id={ndvi_result.polygon_id}, acquisition_id={ndvi_result.acquisition_id}")
 
-        # 5. Leer NDVI y aplicar segmentación
+        # 6. Leer NDVI y aplicar segmentación
         try:
             ndvi_array, cultivated_mask, total_pixels, cultivated_pixels, percentage, profile = \
                 self._read_and_segment_ndvi(ndvi_result.ndvi_tiff, threshold)
@@ -122,7 +140,11 @@ class SegmentationService:
         binary_mask_bytes = None
         if save_mask:
             try:
-                binary_mask_bytes = self._mask_to_tiff(cultivated_mask, profile)
+                binary_mask_bytes = self._mask_to_tiff(
+                    cultivated_mask,
+                    profile,
+                    valid_mask=~np.isnan(ndvi_array),
+                )
                 logger.info(f"💾 Máscara TIFF generada: {len(binary_mask_bytes)} bytes")
             except Exception as e:
                 logger.error(f"❌ Error generando máscara TIFF: {str(e)}")
@@ -188,25 +210,35 @@ class SegmentationService:
 
         return ndvi_array, cultivated_mask, total_pixels, cultivated_pixels, percentage, profile
 
-    def _mask_to_tiff(self, mask: np.ndarray, profile: Dict) -> bytes:
+    def _mask_to_tiff(
+        self,
+        mask: np.ndarray,
+        profile: Dict,
+        valid_mask: Optional[np.ndarray] = None,
+    ) -> bytes:
         """
         Convierte máscara binaria (bool) a TIFF uint8.
 
         Args:
             mask: Array booleano (True=cultivado, False=no cultivado)
             profile: Perfil rasterio
+            valid_mask: Píxeles con NDVI válido; los demás se escriben como 255
 
         Returns:
-            bytes: TIFF uint8 comprimido LZW (0=no cultivado, 1=cultivado)
+            bytes: TIFF uint8 LZW (0=no cultivado, 1=cultivado, 255=nodata)
         """
-        # Convertir bool a uint8
-        mask_uint8 = mask.astype(np.uint8)
+        # 0=no cultivado, 1=cultivado y 255=fuera de parcela/sin dato.
+        if valid_mask is None:
+            valid_mask = np.ones(mask.shape, dtype=bool)
+        mask_uint8 = np.full(mask.shape, 255, dtype=np.uint8)
+        mask_uint8[valid_mask] = mask[valid_mask].astype(np.uint8)
 
         # Actualizar profile para uint8
         profile.update(
             dtype=rasterio.uint8,
             count=1,
-            compress='lzw'
+            compress='lzw',
+            nodata=255,
         )
 
         # Escribir a bytes

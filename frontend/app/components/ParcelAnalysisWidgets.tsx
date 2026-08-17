@@ -83,7 +83,7 @@ export default function ParcelAnalysisWidgets({
   polygonName,
   polygonCoordinates,
 }: ParcelAnalysisWidgetsProps) {
-  const { latestNDVI, phenology, retry: retryAll } = useParcelAnalysis(polygonId);
+  const { phenology, retry: retryAll } = useParcelAnalysis(polygonId);
   const { getStartDate, getEndDate } = useDateRange();
 
   const [availableDates, setAvailableDates] = useState<NDVISummary[]>([]);
@@ -100,10 +100,21 @@ export default function ParcelAnalysisWidgets({
         const response = await apiClient.get<NDVISummary[]>(`/api/ndvi/polygon/${polygonId}`, {
           params: { start_date: startDate, end_date: endDate },
         });
-        setAvailableDates(response.data);
+        const suitableDates = response.data.filter(
+          (date) => date.quality_status === 'suitable' && date.cloud_mask_applied === true
+        );
+        setAvailableDates(suitableDates);
 
-        if (response.data.length > 0 && !selectedDate) {
-          setSelectedDate(response.data[0]);
+        if (suitableDates.length > 0) {
+          setSelectedDate((current) => (
+            current && suitableDates.some((date) => date.ndvi_result_id === current.ndvi_result_id)
+              ? current
+              : suitableDates[0]
+          ));
+        } else {
+          setSelectedDate(null);
+          setSegmentation(errorState('No hay fechas aptas para segmentación'));
+          setTexture(errorState('No hay fechas aptas para textura'));
         }
       } catch (error) {
         setAvailableDates([]);
@@ -112,13 +123,6 @@ export default function ParcelAnalysisWidgets({
 
     void loadAvailableDates();
   }, [polygonId, getStartDate, getEndDate]);
-
-  // Sincronizar con latestNDVI cuando cambia
-  useEffect(() => {
-    if (latestNDVI.data && !selectedDate) {
-      setSelectedDate(latestNDVI.data);
-    }
-  }, [latestNDVI.data, selectedDate]);
 
   // Cargar análisis de la fecha seleccionada
   const loadSelectedDateAnalysis = useCallback(async (ndviSummary: NDVISummary) => {

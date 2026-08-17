@@ -10,8 +10,14 @@ import apiClient from '@/lib/axios';
 interface DateInfo {
   date: string;
   cloud_cover: number;
+  scene_id: string;
   acquired: boolean;
   ndvi_calculated: boolean;
+  parcel_cloud_cover: number | null;
+  parcel_shadow_cover: number | null;
+  valid_pixel_percentage: number | null;
+  usable_pixel_percentage: number | null;
+  quality_status: 'suitable' | 'caution' | 'unsuitable' | null;
 }
 
 interface SentinelPanelProps {
@@ -146,9 +152,11 @@ export default function SentinelPanel({
     setErrorMessage('');
 
     try {
+      const selectedDateInfo = dates.find((dateInfo) => dateInfo.date === selectedDate);
       const requestPayload = {
         polygon_id: polygonId,
         date: selectedDate,
+        scene_id: selectedDateInfo?.scene_id,
       };
 
       const response = await apiClient.post('/api/sentinel/acquire', requestPayload);

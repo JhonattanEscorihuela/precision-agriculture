@@ -21,7 +21,9 @@ async def save_ndvi_result(
     ndvi_tiff: bytes,
     stats: dict,
     width: int,
-    height: int
+    height: int,
+    analysis_valid_pixel_percentage: Optional[float] = None,
+    cloud_mask_applied: bool = False,
 ) -> NDVIResult:
     """
     Guarda un nuevo resultado NDVI en la base de datos.
@@ -50,8 +52,13 @@ async def save_ndvi_result(
             ndvi_min=stats["ndvi_min"],
             ndvi_max=stats["ndvi_max"],
             ndvi_std=stats["ndvi_std"],
+            ndvi_median=stats.get("ndvi_median"),
+            ndvi_p10=stats.get("ndvi_p10"),
+            ndvi_p90=stats.get("ndvi_p90"),
             width=width,
             height=height,
+            analysis_valid_pixel_percentage=analysis_valid_pixel_percentage,
+            cloud_mask_applied=cloud_mask_applied,
             calculation_date=datetime.utcnow(),
             created_at=datetime.utcnow()
         )
@@ -63,6 +70,63 @@ async def save_ndvi_result(
         await db.rollback()
         logger.error(f"❌ Error saving NDVI result: {str(e)}")
         logging.error(f"   acquisition_id={acquisition_id}, polygon_id={polygon_id}")
+        raise
+
+
+async def replace_ndvi_result_with_masked(
+    db: AsyncSession,
+    ndvi_result: NDVIResult,
+    ndvi_tiff: bytes,
+    stats: dict,
+    width: int,
+    height: int,
+    analysis_valid_pixel_percentage: float,
+) -> NDVIResult:
+    """Reemplaza un NDVI legado e invalida resultados derivados que quedarían obsoletos."""
+    from app.models.analysis import TextureOverlayCache
+    from app.models.segmentation import SegmentationResult
+    from app.models.texture import TextureDescriptor
+
+    try:
+        await db.execute(
+            delete(TextureOverlayCache).where(
+                TextureOverlayCache.ndvi_result_id == ndvi_result.id
+            )
+        )
+        segmentation_ids = select(SegmentationResult.id).where(
+            SegmentationResult.ndvi_result_id == ndvi_result.id
+        )
+        await db.execute(
+            delete(TextureDescriptor).where(
+                TextureDescriptor.segmentation_result_id.in_(segmentation_ids)
+            )
+        )
+        await db.execute(
+            delete(SegmentationResult).where(
+                SegmentationResult.ndvi_result_id == ndvi_result.id
+            )
+        )
+        ndvi_result.ndvi_tiff = ndvi_tiff
+        ndvi_result.ndvi_mean = stats["ndvi_mean"]
+        ndvi_result.ndvi_min = stats["ndvi_min"]
+        ndvi_result.ndvi_max = stats["ndvi_max"]
+        ndvi_result.ndvi_std = stats["ndvi_std"]
+        ndvi_result.ndvi_median = stats.get("ndvi_median")
+        ndvi_result.ndvi_p10 = stats.get("ndvi_p10")
+        ndvi_result.ndvi_p90 = stats.get("ndvi_p90")
+        ndvi_result.width = width
+        ndvi_result.height = height
+        ndvi_result.analysis_valid_pixel_percentage = analysis_valid_pixel_percentage
+        ndvi_result.cloud_mask_applied = True
+        ndvi_result.overlay_png = None
+        ndvi_result.calculation_date = datetime.utcnow()
+        db.add(ndvi_result)
+        await db.commit()
+        await db.refresh(ndvi_result)
+        return ndvi_result
+    except Exception:
+        await db.rollback()
+        logger.exception("Error replacing legacy NDVI result with masked result")
         raise
 
 

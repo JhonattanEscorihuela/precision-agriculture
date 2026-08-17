@@ -21,6 +21,11 @@ export interface NDVISummary {
   ndvi_p90?: number | null;
   width: number;
   height: number;
+  analysis_valid_pixel_percentage?: number | null;
+  cloud_mask_applied?: boolean;
+  quality_status?: 'suitable' | 'caution' | 'unsuitable' | null;
+  parcel_cloud_cover?: number | null;
+  usable_pixel_percentage?: number | null;
 }
 
 export interface SegmentationResult {

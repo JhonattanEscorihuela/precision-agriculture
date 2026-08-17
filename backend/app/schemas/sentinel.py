@@ -62,6 +62,14 @@ class DateInfo(BaseModel):
     datetime: str = Field(default="", description="Timestamp completo ISO 8601")
     acquired: bool = Field(default=False, description="Si esta fecha ya fue adquirida (bandas descargadas)")
     ndvi_calculated: bool = Field(default=False, description="Si esta fecha ya tiene NDVI calculado")
+    parcel_cloud_cover: Optional[float] = Field(
+        default=None,
+        description="Nubosidad SCL dentro de la parcela; disponible tras adquirir"
+    )
+    parcel_shadow_cover: Optional[float] = None
+    valid_pixel_percentage: Optional[float] = None
+    usable_pixel_percentage: Optional[float] = None
+    quality_status: Optional[str] = None
 
 
 class AvailableDatesRequest(BaseModel):
@@ -83,6 +91,7 @@ class AcquireBandsRequest(BaseModel):
     """Request para adquirir bandas B04 y B08"""
     polygon_id: int
     date: str = Field(description="Fecha de adquisición (YYYY-MM-DD)")
+    scene_id: Optional[str] = Field(default=None, description="Escena seleccionada en la consulta STAC")
     width: int = Field(default=512, ge=10, le=2500)
     height: int = Field(default=512, ge=10, le=2500)
 
@@ -92,7 +101,14 @@ class AcquireBandsResponse(BaseModel):
     acquisition_id: int
     polygon_id: int
     date: str
-    cloud_coverage: float
+    cloud_coverage: Optional[float] = None
+    scene_id: Optional[str] = None
+    parcel_cloud_cover: Optional[float] = None
+    parcel_shadow_cover: Optional[float] = None
+    valid_pixel_percentage: Optional[float] = None
+    usable_pixel_percentage: Optional[float] = None
+    quality_status: Optional[str] = None
+    cloud_method: Optional[str] = None
     size_b04_kb: float
     size_b08_kb: float
     already_existed: bool = Field(default=False, description="Si la adquisición ya existía")

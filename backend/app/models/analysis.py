@@ -47,6 +47,14 @@ class NDVIResultBase(SQLModel):
     # Metadatos del raster
     width: int = Field(description="Ancho del raster NDVI en píxeles")
     height: int = Field(description="Alto del raster NDVI en píxeles")
+    analysis_valid_pixel_percentage: Optional[float] = Field(
+        default=None,
+        description="Píxeles de parcela usados tras aplicar nodata, SCL y geometría"
+    )
+    cloud_mask_applied: bool = Field(
+        default=False,
+        description="Indica si el NDVI excluyó nubes y sombras mediante SCL"
+    )
 
 
 class NDVIResult(NDVIResultBase, table=True):
