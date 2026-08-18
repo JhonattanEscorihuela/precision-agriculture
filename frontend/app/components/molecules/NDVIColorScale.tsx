@@ -11,15 +11,6 @@
  * Responsive: scroll horizontal en mobile si es necesario.
  */
 export default function NDVIColorScale() {
-  const ranges = [
-    { value: -1.0, color: '#8B4513', label: 'Sin vegetación' },
-    { value: 0.0, color: '#D2B48C', label: 'Escasa' },
-    { value: 0.2, color: '#ADFF2F', label: 'Baja' },
-    { value: 0.4, color: '#32CD32', label: 'Media' },
-    { value: 0.6, color: '#006400', label: 'Densa' },
-    { value: 1.0, color: '#006400', label: '' } // Final del rango
-  ];
-
   return (
     <div className="space-y-2 overflow-x-auto">
       {/* Título */}

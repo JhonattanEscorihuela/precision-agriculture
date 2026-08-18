@@ -189,7 +189,8 @@ async def get_ndvi_by_polygon(
     polygon_id: int,
     start_date: str = None,
     end_date: str = None,
-    limit: int = 100
+    limit: int = 100,
+    quality_eligible_only: bool = False,
 ) -> List[tuple]:
     """
     Lista todos los resultados NDVI de un polígono con JOIN a SentinelAcquisition,
@@ -204,6 +205,7 @@ async def get_ndvi_by_polygon(
         start_date: Fecha inicio filtro (YYYY-MM-DD) - opcional
         end_date: Fecha fin filtro (YYYY-MM-DD) - opcional
         limit: Número máximo de resultados (default 100, suficiente para 2 años)
+        quality_eligible_only: Exige calidad ``suitable`` y máscara SCL aplicada.
 
     Returns:
         Lista de tuplas (NDVIResult, acquisition_date) ordenados por fecha de adquisición (cronológico)
@@ -222,6 +224,11 @@ async def get_ndvi_by_polygon(
             query = query.where(SentinelAcquisition.acquisition_date >= start_date)
         if end_date:
             query = query.where(SentinelAcquisition.acquisition_date <= end_date)
+        if quality_eligible_only:
+            query = query.where(
+                SentinelAcquisition.quality_status == "suitable",
+                NDVIResult.cloud_mask_applied.is_(True),
+            )
 
         query = query.order_by(SentinelAcquisition.acquisition_date.desc()).limit(limit)
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { usePolygons } from '../context/PolygonContext';
@@ -67,10 +68,13 @@ export default function Sidebar() {
             {/* Logo Principal */}
             <div className="p-8 pt-8 text-center relative z-[2] border-b border-satellite-blue/20">
                 <div className="relative inline-block mb-4">
-                    <img
+                    <Image
                         src="/logo-universidad.png"
                         alt="Universidad de Carabobo"
                         className="h-20 w-auto brightness-110 drop-shadow-[0_0_10px_rgba(14,165,233,0.3)] animate-pulse-glow"
+                        height={80}
+                        priority
+                        width={160}
                     />
                 </div>
                 <h1 className="text-white text-sm font-semibold leading-tight tracking-wide drop-shadow-lg mb-4">

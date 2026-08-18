@@ -111,13 +111,22 @@ La validación se distribuye como evidencia medible en cada OE.
 - ✅ Layering CSS con overlay semi-transparente sobre foto real
 - ✅ Integración Process API para descarga RGB PNG de Sentinel Hub
 
-### OE3 — Analizar segmentación espacial
-- ✅ Prototipo filtro convolucional en notebook
-- 🔧 PENDIENTE: Migrar a servicio + endpoints + widget dashboard
+### OE3 — Analizar segmentación espacial ✅ IMPLEMENTACIÓN COMPLETA
+- ✅ Servicio y endpoints autenticados e idempotentes
+- ✅ Segmentación por umbral NDVI configurable y máscara GeoTIFF reproducible
+- ✅ Métricas de área cultivada, persistencia y widget de dashboard
+- ✅ Puerta de calidad SCL: solo adquisiciones aptas con máscara de nubes
+- ⚠️ Validación agronómica parcial: falta verdad terrestre para medir IoU/F1
 
-### OE4 — Evaluar descriptores de textura
-- ✅ U-Net implementada (datos sintéticos)
-- 🔧 PENDIENTE: Entrenar con datos reales + servicio + widget dashboard
+### OE4 — Evaluar descriptores de textura ✅ IMPLEMENTACIÓN COMPLETA
+- ✅ Bordes, homogeneidad y contraste mediante filtrado convolucional
+- ✅ Estadísticos, normalización, persistencia, overlays y widget de dashboard
+- ✅ Trazabilidad completa y puerta de calidad heredada de OE3/NDVI
+- ⚠️ Validación agronómica parcial: falta asociar respuestas con clases de campo
+
+**Alcance científico:** los CSV atribuidos a Brasil permiten una demostración
+exploratoria, pero no contienen geometría ni verdad terrestre y se solapan entre
+sí. Ver `docs/VALIDACION_CIENTIFICA_OE3_OE4.md`.
 
 ### OE5 — Construir interfaz integrada
 - ✅ Mapa Leaflet con dibujo de polígonos

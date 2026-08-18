@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # Generar con: openssl rand -hex 32
     SECRET_KEY: str  # Sin default value - OBLIGATORIO en .env
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 días
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 horas; configurable por entorno
 
     # Sentinel-2 / Copernicus DataSpace Credentials
     SENTINEL_CLIENT_ID: str = ""  # Opcional: tiene default vacío para tests
@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Lista de orígenes permitidos separados por comas
     # Ejemplo: "http://localhost:3000,https://app.example.com"
     CORS_ORIGINS: str = "http://localhost:3000"
+    ENVIRONMENT: str = "development"
+    SQL_LOG_LEVEL: str = "WARNING"
 
     class Config:
         env_file = ".env"

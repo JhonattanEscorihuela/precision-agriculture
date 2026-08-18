@@ -62,10 +62,17 @@ enmascarada con suelo no cultivado.
 
 ## Migración y backfill
 
-Aplicar, en orden:
+El esquema se administra con Alembic. Antes de migrar una base existente se
+debe generar un respaldo y luego ejecutar desde `backend/`:
 
-1. `backend/migrations/add_parcel_cloud_coverage.sql`
-2. `backend/migrations/add_scl_quality_and_masked_ndvi.sql`
+```bash
+alembic upgrade head
+```
+
+La revisión `20260817_0001` registra/crea el esquema base de forma segura y
+`20260817_0002` incorpora calidad SCL, integridad referencial y restricciones
+de unicidad. Los SQL históricos de `backend/migrations/` se conservan solo como
+referencia y no deben reaplicarse sobre una base ya versionada por Alembic.
 
 Para completar adquisiciones existentes:
 

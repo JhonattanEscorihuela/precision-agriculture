@@ -8,6 +8,7 @@ import SegmentationPanel from '@/app/components/organisms/SegmentationPanel';
 import FenologicalComparisonWidget from '@/app/components/organisms/FenologicalComparisonWidget';
 import TextureWidget from '@/app/components/organisms/TextureWidget';
 import apiClient from '@/lib/axios';
+import { isAnalysisEligible } from '@/lib/acquisitionQuality';
 import type { NDVISummary, ResourceState, SegmentationResult, TextureDescriptor } from '@/lib/analysisTypes';
 import { isAxiosError } from 'axios';
 
@@ -100,9 +101,7 @@ export default function ParcelAnalysisWidgets({
         const response = await apiClient.get<NDVISummary[]>(`/api/ndvi/polygon/${polygonId}`, {
           params: { start_date: startDate, end_date: endDate },
         });
-        const suitableDates = response.data.filter(
-          (date) => date.quality_status === 'suitable' && date.cloud_mask_applied === true
-        );
+        const suitableDates = response.data.filter(isAnalysisEligible);
         setAvailableDates(suitableDates);
 
         if (suitableDates.length > 0) {
@@ -116,7 +115,7 @@ export default function ParcelAnalysisWidgets({
           setSegmentation(errorState('No hay fechas aptas para segmentación'));
           setTexture(errorState('No hay fechas aptas para textura'));
         }
-      } catch (error) {
+      } catch {
         setAvailableDates([]);
       }
     };
@@ -136,10 +135,10 @@ export default function ParcelAnalysisWidgets({
       try {
         const textureResult = await getOrCreateTexture(segResult.id);
         setTexture(successState(textureResult));
-      } catch (err) {
+      } catch {
         setTexture(errorState('No se pudo cargar la textura'));
       }
-    } catch (err) {
+    } catch {
       setSegmentation(errorState('No se pudo cargar la segmentación'));
       setTexture(errorState('Requiere segmentación'));
     }
@@ -147,9 +146,13 @@ export default function ParcelAnalysisWidgets({
 
   // Recargar cuando cambia la fecha seleccionada
   useEffect(() => {
-    if (selectedDate) {
+    if (!selectedDate) return;
+
+    const timer = window.setTimeout(() => {
       void loadSelectedDateAnalysis(selectedDate);
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [selectedDate, loadSelectedDateAnalysis]);
 
   const handleDateChange = (acquisitionId: number) => {

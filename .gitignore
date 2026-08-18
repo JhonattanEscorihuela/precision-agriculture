@@ -4,6 +4,7 @@
 **/*.pyc
 **/__pycache__/
 **/.pytest_cache/
+**/.coverage
 **/.ipynb_checkpoints/
 
 # Ignorar logs y dumps

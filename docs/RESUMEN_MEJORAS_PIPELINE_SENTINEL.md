@@ -127,6 +127,10 @@ El resultado del 11 de agosto es la evidencia más importante de la corrección:
 - Una adquisición no apta puede conservar un NDVI enmascarado para auditoría, pero no puede alimentar automáticamente OE3 ni OE4.
 - Estas mejoras resuelven la calidad del procesamiento satelital. No sustituyen la falta de una fuente nacional completa de geometrías de parcelas; los datos de Brasil siguen siendo evidencia parcial para los objetivos que dependen de esa disponibilidad.
 
+El análisis reproducible de esa evidencia, su solapamiento y el protocolo de
+verdad terrestre necesario para cerrar OE3/OE4 están en
+`docs/VALIDACION_CIENTIFICA_OE3_OE4.md`.
+
 ## Conclusión
 
 La mejora principal fue pasar de una decisión basada en la nubosidad general de una escena a una evaluación local, reproducible y trazable dentro de cada parcela. El NDVI y los productos OE3/OE4 ahora comparten una política de calidad coherente, por lo que se reduce considerablemente el riesgo de generar conclusiones agrícolas a partir de píxeles nublados, sombreados o inválidos.

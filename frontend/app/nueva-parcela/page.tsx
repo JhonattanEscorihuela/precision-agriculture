@@ -40,7 +40,7 @@ export default function NuevaParcelaPage() {
             } else {
                 setError('El archivo debe ser un GeoJSON válido con geometría tipo Polygon');
             }
-        } catch (err) {
+        } catch {
             setError('Error al procesar el archivo. Verifica que sea un GeoJSON válido.');
         }
     };
@@ -66,7 +66,7 @@ export default function NuevaParcelaPage() {
             } else {
                 setError('El GeoJSON debe tener geometría tipo Polygon');
             }
-        } catch (err) {
+        } catch {
             setError('JSON inválido. Verifica la sintaxis.');
         }
     };

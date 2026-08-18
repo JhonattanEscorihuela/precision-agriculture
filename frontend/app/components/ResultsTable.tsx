@@ -7,10 +7,9 @@ type ResultRow = {
     status?: 'healthy' | 'alert' | 'critical';
 };
 
-export default function ResultsTable({ title, results, variant = 'default' }: {
+export default function ResultsTable({ title, results }: {
     title?: string;
     results: ResultRow[];
-    variant?: 'default' | 'compact';
 }) {
     const statusColors = {
         healthy: 'bg-vegetation-healthy',

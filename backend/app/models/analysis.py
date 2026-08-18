@@ -4,7 +4,7 @@ Almacena raster NDVI y estadísticos calculados a partir de bandas Sentinel-2.
 """
 
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Integer, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, UniqueConstraint
 from typing import Optional
 from datetime import datetime
 
@@ -69,6 +69,16 @@ class NDVIResult(NDVIResultBase, table=True):
     """
     __tablename__ = "ndvi_results"
 
+    acquisition_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("sentinel_acquisitions.id", ondelete="CASCADE"),
+            unique=True,
+        )
+    )
+    polygon_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("polygon.id", ondelete="CASCADE"))
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
 
     # Raster NDVI completo en formato TIFF float32
@@ -163,4 +173,12 @@ class TextureOverlayCache(SQLModel, table=True):
         sa_column=Column(DateTime),
         default_factory=datetime.utcnow,
         description="Timestamp de creación del caché"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "ndvi_result_id",
+            "kernel",
+            name="uq_texture_overlay_ndvi_kernel",
+        ),
     )

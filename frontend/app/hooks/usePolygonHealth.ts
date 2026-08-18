@@ -27,10 +27,16 @@ export function usePolygonHealth(polygonIds: number[]) {
   const { token } = useAuth();
   const [health, setHealth] = useState<PolygonHealth>({});
   const [isLoading, setIsLoading] = useState(true);
+  const polygonIdsKey = polygonIds.join(',');
 
   useEffect(() => {
     const fetchHealth = async () => {
-      if (!token || polygonIds.length === 0) {
+      const requestedPolygonIds = polygonIdsKey
+        .split(',')
+        .filter(Boolean)
+        .map(Number);
+
+      if (!token || requestedPolygonIds.length === 0) {
         setIsLoading(false);
         return;
       }
@@ -39,7 +45,7 @@ export function usePolygonHealth(polygonIds: number[]) {
       const healthData: PolygonHealth = {};
 
       // Consultar último NDVI de cada parcela
-      for (const polygonId of polygonIds) {
+      for (const polygonId of requestedPolygonIds) {
         try {
           const response = await apiClient.get(
             `/api/ndvi/polygon/${polygonId}?limit=1`
@@ -84,7 +90,7 @@ export function usePolygonHealth(polygonIds: number[]) {
     };
 
     fetchHealth();
-  }, [polygonIds.join(','), token]); // Usar string estable en lugar de array
+  }, [polygonIdsKey, token]);
 
   return { health, isLoading };
 }

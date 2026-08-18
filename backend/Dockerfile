@@ -17,8 +17,12 @@ COPY requirements.txt requirements.txt
 RUN python -m pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
+# Alembic cambia con menor frecuencia y no invalida la capa científica pesada.
+COPY requirements-migrations.txt requirements-migrations.txt
+RUN pip install --no-cache-dir -r requirements-migrations.txt
+
 # Copiar el resto del código
 COPY . .
 
 # Comando para iniciar el servidor de FastAPI
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port 8000"]

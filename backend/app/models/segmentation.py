@@ -53,6 +53,16 @@ class SegmentationResult(SegmentationResultBase, table=True):
     """
     __tablename__ = "segmentation_results"
 
+    ndvi_result_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("ndvi_results.id", ondelete="CASCADE"),
+            unique=True,
+        )
+    )
+    polygon_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("polygon.id", ondelete="CASCADE"))
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
 
     # Máscara binaria (0=no cultivado, 1=cultivado) en formato TIFF uint8

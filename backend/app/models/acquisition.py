@@ -4,7 +4,7 @@ Almacena bandas B04 y B08 descargadas para análisis posterior.
 """
 
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Integer, ForeignKey, Index
+from sqlalchemy import Column, Integer, ForeignKey, Index, UniqueConstraint
 from typing import Optional
 
 
@@ -54,6 +54,10 @@ class SentinelAcquisition(SentinelAcquisitionBase, table=True):
     """
     __tablename__ = "sentinel_acquisitions"
 
+    # SQLModel 0.0.8 no propaga ForeignKey desde la clase base al metadata.
+    polygon_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("polygon.id", ondelete="CASCADE"))
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
     b04_data: bytes = Field(description="Banda roja (Red) en formato TIFF")
     b08_data: bytes = Field(description="Banda infrarrojo cercano (NIR) en formato TIFF")
@@ -66,6 +70,11 @@ class SentinelAcquisition(SentinelAcquisitionBase, table=True):
     # Índices para optimizar queries frecuentes
     __table_args__ = (
         Index('idx_polygon_date', 'polygon_id', 'acquisition_date'),
+        UniqueConstraint(
+            'polygon_id',
+            'acquisition_date',
+            name='uq_sentinel_polygon_date',
+        ),
         # Índice compuesto para búsquedas por polígono y fecha (get_acquisitions_by_polygon)
         # Mejora performance en queries del dashboard y NDVIPanel
     )

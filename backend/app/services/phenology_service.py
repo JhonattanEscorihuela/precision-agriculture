@@ -55,14 +55,22 @@ class PhenologyService:
                 detail="You don't have permission to access this polygon",
             )
 
-        ndvi_results_with_dates = await crud_ndvi.get_ndvi_by_polygon(db, polygon_id)
+        ndvi_results_with_dates = await crud_ndvi.get_ndvi_by_polygon(
+            db,
+            polygon_id,
+            quality_eligible_only=True,
+        )
         if not ndvi_results_with_dates:
             raise HTTPException(
                 status_code=400,
-                detail="No NDVI data for this parcel. Calculate NDVI first.",
+                detail=(
+                    "No NDVI data eligible for phenology. Use suitable "
+                    "acquisitions recalculated with the SCL cloud mask."
+                ),
             )
 
         warnings: List[str] = [
+            "Solo se utilizaron adquisiciones aptas con máscara SCL aplicada.",
             "El día 0 corresponde a la primera observación NDVI disponible, "
             "no a la fecha real de siembra."
         ]

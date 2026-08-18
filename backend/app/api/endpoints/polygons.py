@@ -3,9 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.polygon import PolygonCreate, PolygonUpdate, PolygonResponse
 from app.models.polygon import Polygon
 from app.models.user import User
-from app.crud.polygon import create_polygon, get_polygons, update_polygon, delete_polygon, get_polygons_by_user
+from app.crud.polygon import create_polygon, update_polygon, delete_polygon, get_polygons_by_user
 from app.database import get_session
 from app.core.security import get_current_user
+from app.core.ownership import require_owned_polygon
 from datetime import datetime
 from app.services.polygons_logic import calculate_polygon_area
 from typing import List
@@ -46,9 +47,10 @@ async def get_all_polygons_endpoint(
 async def update_polygon_endpoint(
     polygon_id: int,
     polygon: PolygonUpdate,
-    db: AsyncSession = Depends(get_session)
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    # Buscar el polígono en la base de datos
+    await require_owned_polygon(db, polygon_id, current_user.id)
     updated_polygon = await update_polygon(db, polygon_id, polygon.dict(exclude_unset=True))
 
     if not updated_polygon:
@@ -69,7 +71,12 @@ async def update_polygon_endpoint(
 
 # Eliminar polígonos
 @router.delete("/{polygon_id}", status_code=204)
-async def delete_polygon_endpoint(polygon_id: int, db: AsyncSession = Depends(get_session)):
+async def delete_polygon_endpoint(
+    polygon_id: int,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    await require_owned_polygon(db, polygon_id, current_user.id)
     deleted = await delete_polygon(db, polygon_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Polygon not found")

@@ -23,7 +23,13 @@ def _patch_data(monkeypatch: pytest.MonkeyPatch, observations, *, owner_id: int 
     async def get_polygon_by_id(_db, polygon_id: int):
         return SimpleNamespace(id=polygon_id, user_id=owner_id)
 
-    async def get_ndvi_by_polygon(_db, _polygon_id: int):
+    async def get_ndvi_by_polygon(
+        _db,
+        _polygon_id: int,
+        *,
+        quality_eligible_only: bool = False,
+    ):
+        assert quality_eligible_only is True
         return observations
 
     monkeypatch.setattr(crud_polygon, "get_polygon_by_id", get_polygon_by_id)
@@ -142,7 +148,12 @@ async def test_wrong_owner_raises_403_without_loading_ndvi(monkeypatch):
     async def get_polygon_by_id(_db, polygon_id: int):
         return SimpleNamespace(id=polygon_id, user_id=99)
 
-    async def get_ndvi_by_polygon(_db, _polygon_id: int):
+    async def get_ndvi_by_polygon(
+        _db,
+        _polygon_id: int,
+        *,
+        quality_eligible_only: bool = False,
+    ):
         nonlocal ndvi_called
         ndvi_called = True
         return []

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { getQualityLabel } from '@/lib/acquisitionQuality';
 
 interface DateBadgeProps {
   date: string;
@@ -37,6 +38,8 @@ export default function DateBadge({
   qualityStatus,
   onClick,
 }: DateBadgeProps) {
+  const qualityLabel = getQualityLabel(qualityStatus);
+
   // Formatear fecha para mostrar solo día/mes
   const formatDate = (dateStr: string) => {
     const [, month, day] = dateStr.split('-');
@@ -117,9 +120,9 @@ export default function DateBadge({
             ? `Parcela ${parcelCloudCover.toFixed(1)}%`
             : `Escena ${sceneCloudCover.toFixed(1)}%`}
         </div>
-        {qualityStatus && (
+        {qualityLabel && (
           <div className="mt-1 text-[10px] font-semibold uppercase leading-tight">
-            {qualityStatus === 'suitable' ? 'Apta' : qualityStatus === 'caution' ? 'Precaución' : 'No apta'}
+            {qualityLabel}
           </div>
         )}
       </div>

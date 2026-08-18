@@ -53,6 +53,15 @@ class TextureDescriptor(TextureDescriptorBase, table=True):
     """
     __tablename__ = "texture_descriptors"
 
+    segmentation_result_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("segmentation_results.id", ondelete="CASCADE"),
+        )
+    )
+    polygon_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("polygon.id", ondelete="CASCADE"))
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
 
     # Timestamps
