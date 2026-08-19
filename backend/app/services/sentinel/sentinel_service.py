@@ -296,6 +296,10 @@ class SentinelService:
             existing = await get_acquisition_by_polygon_and_date(db_session, polygon_id, date)
             if existing:
                 logger.warning(f"⚠️  Ya existe adquisición para polígono {polygon_id} en {date}")
+
+                # Completar datos faltantes si es necesario
+                needs_update = False
+
                 if existing.scl_data is None or existing.parcel_cloud_cover is None:
                     logger.info("☁️  Completando métricas SCL faltantes de la adquisición existente...")
                     scl_width, scl_height = calculate_optimal_dimensions(
@@ -321,6 +325,25 @@ class SentinelService:
                     existing.quality_status = metrics["quality_status"]
                     existing.cloud_method = "SCL"
                     existing.scene_id = existing.scene_id or scene_id
+                    needs_update = True
+
+                if existing.rgb_png is None:
+                    logger.info("🌈 Completando RGB PNG faltante de la adquisición existente...")
+                    rgb_png_bytes = await self.download_true_color(
+                        polygon_geojson=polygon_geojson,
+                        start_date=date,
+                        end_date=date,
+                        width=width,
+                        height=height,
+                        max_cloud_coverage=max_cloud_coverage,
+                        polygon_id=polygon_id
+                    )
+                    rgb_size_kb = len(rgb_png_bytes) / 1024
+                    logger.info(f"✅ RGB PNG descargado: {rgb_size_kb:.2f} KB")
+                    existing.rgb_png = rgb_png_bytes
+                    needs_update = True
+
+                if needs_update:
                     db_session.add(existing)
                     await db_session.commit()
                     await db_session.refresh(existing)
@@ -397,6 +420,20 @@ class SentinelService:
         from app.services.cloud_coverage_service import calculate_parcel_cloud_coverage
         parcel_quality = calculate_parcel_cloud_coverage(scl_bytes, polygon_geojson)
 
+        # Descargar RGB PNG en la misma adquisición (garantiza misma escena)
+        logger.info("🌈 Descargando imagen RGB true-color...")
+        rgb_png_bytes = await self.download_true_color(
+            polygon_geojson=polygon_geojson,
+            start_date=date,
+            end_date=date,
+            width=width,
+            height=height,
+            max_cloud_coverage=max_cloud_coverage,
+            polygon_id=polygon_id
+        )
+        rgb_size_kb = len(rgb_png_bytes) / 1024
+        logger.info(f"✅ RGB PNG descargado: {rgb_size_kb:.2f} KB")
+
         # Obtener cloud_coverage del día desde STAC
         logger.info("☁️  Obteniendo cloud_coverage desde STAC...")
         try:
@@ -451,6 +488,7 @@ class SentinelService:
                 b04_data=b04_bytes,
                 b08_data=b08_bytes,
                 scl_data=scl_bytes,
+                rgb_png=rgb_png_bytes,
                 created_at=datetime.utcnow().isoformat()
             )
 

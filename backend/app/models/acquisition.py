@@ -65,6 +65,10 @@ class SentinelAcquisition(SentinelAcquisitionBase, table=True):
         default=None,
         description="SCL y dataMask originales usados para control de calidad y enmascarado"
     )
+    rgb_png: Optional[bytes] = Field(
+        default=None,
+        description="Imagen RGB true-color PNG descargada en la misma adquisición (garantiza misma escena)"
+    )
     created_at: str = Field(description="Timestamp de creación (ISO 8601)")
 
     # Índices para optimizar queries frecuentes
@@ -104,6 +108,7 @@ class SentinelAcquisitionCreate(SentinelAcquisitionBase):
     b04_data: bytes
     b08_data: bytes
     scl_data: Optional[bytes] = None
+    rgb_png: Optional[bytes] = None
     created_at: str
 
 

@@ -555,7 +555,7 @@ async def get_satellite_image(
         # Convertir fecha de adquisición a string (puede ser date o str)
         acq_date_str = str(acquisition.acquisition_date) if not isinstance(acquisition.acquisition_date, str) else acquisition.acquisition_date
 
-        # 5. Cache check
+        # 5. Cache check - Primero buscar en ndvi_result
         if ndvi_result.satellite_png and not force:
             png_bytes = ndvi_result.satellite_png
             with rasterio.open(io.BytesIO(ndvi_result.ndvi_tiff)) as src:
@@ -563,27 +563,36 @@ async def get_satellite_image(
                 leaflet_bounds = [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
             cached = True
         else:
-            sentinel_service = SentinelService()
+            # Si no hay cache en ndvi_result, buscar RGB en sentinel_acquisition
+            # Esto garantiza que el RGB es de la misma escena que el NDVI
+            rgb_png_bytes = None
+            if acquisition.rgb_png:
+                logger.info(f"✅ RGB encontrado en sentinel_acquisition (misma escena que NDVI)")
+                rgb_png_bytes = acquisition.rgb_png
+                cached_source = "acquisition"
+            else:
+                # Fallback: descargar desde Sentinel Hub (puede ser escena diferente)
+                logger.warning(f"⚠️ RGB no encontrado en acquisition, descargando desde Sentinel Hub")
+                sentinel_service = SentinelService()
+                rgb_png_bytes = await sentinel_service.download_true_color(
+                    polygon_geojson=polygon_geojson,
+                    start_date=acq_date_str,
+                    end_date=acq_date_str,
+                    width=512,
+                    height=512,
+                    max_cloud_coverage=20,
+                    polygon_id=polygon.id
+                )
+                cached_source = "download"
 
-            # CRÍTICO: Usar el mismo scene_id que se usó para B04/B08/SCL
-            # Esto garantiza que el RGB muestra la MISMA ESCENA que el análisis NDVI
-            rgb_png_bytes = await sentinel_service.download_true_color(
-                polygon_geojson=polygon_geojson,
-                start_date=acq_date_str,
-                end_date=acq_date_str,
-                width=512,
-                height=512,
-                max_cloud_coverage=20,
-                polygon_id=polygon.id,
-                scene_id=acquisition.scene_id  # ← FORZAR ESCENA ESPECÍFICA
-            )
-
+            # Aplicar máscara de polígono al RGB
             png_bytes, leaflet_bounds = generate_satellite_png(
                 rgb_png_bytes=rgb_png_bytes,
                 ndvi_tiff_bytes=ndvi_result.ndvi_tiff,
                 polygon_geojson=polygon_geojson
             )
 
+            # Guardar en cache de ndvi_result para próximas llamadas
             await crud_ndvi.update_satellite_cache(db, ndvi_result.id, png_bytes)
             cached = False
 
