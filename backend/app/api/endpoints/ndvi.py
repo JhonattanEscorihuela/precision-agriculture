@@ -565,6 +565,8 @@ async def get_satellite_image(
         else:
             sentinel_service = SentinelService()
 
+            # CRÍTICO: Usar el mismo scene_id que se usó para B04/B08/SCL
+            # Esto garantiza que el RGB muestra la MISMA ESCENA que el análisis NDVI
             rgb_png_bytes = await sentinel_service.download_true_color(
                 polygon_geojson=polygon_geojson,
                 start_date=acq_date_str,
@@ -572,7 +574,8 @@ async def get_satellite_image(
                 width=512,
                 height=512,
                 max_cloud_coverage=20,
-                polygon_id=polygon.id
+                polygon_id=polygon.id,
+                scene_id=acquisition.scene_id  # ← FORZAR ESCENA ESPECÍFICA
             )
 
             png_bytes, leaflet_bounds = generate_satellite_png(

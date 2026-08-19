@@ -170,7 +170,8 @@ def build_process_request(
     width: int,
     height: int,
     max_cloud_coverage: int,
-    response_format: str = "image/tiff"
+    response_format: str = "image/tiff",
+    scene_id: str = None
 ) -> Dict:
     """
     Construye payload completo para Process API.
@@ -184,10 +185,47 @@ def build_process_request(
         height: Alto en píxeles
         max_cloud_coverage: Cobertura máxima de nubes (0-100)
         response_format: Formato de respuesta (default: "image/tiff")
+        scene_id: Scene ID específico de Sentinel-2 (opcional, para forzar escena exacta)
+                 Formato: S2A_MSIL2A_20260811T145719_N0512_R039_T19PFK_20260811T182904
 
     Returns:
         Dict: Payload para Process API
     """
+    # Construir dataFilter
+    data_filter = {
+        "timeRange": {
+            "from": f"{start_date}T00:00:00Z",
+            "to": f"{end_date}T23:59:59Z"
+        },
+        "maxCloudCoverage": max_cloud_coverage
+    }
+
+    # Si se especifica scene_id, extraer timestamp preciso y NO usar mosaickingOrder
+    # Esto fuerza el uso de la escena exacta
+    if scene_id:
+        # Extraer timestamp del scene_id
+        # Formato: S2B_MSIL2A_20260811T145719_N0512_R039_T19PFK_20260811T182904
+        #                    ^^^^^^^^^^^^^^^^                    ^^^^^^^^^^^^^^^^
+        #                    fecha + hora sensing               fecha + hora processing
+        import re
+        match = re.search(r'_(\d{8}T\d{6})_', scene_id)
+        if match:
+            sensing_time = match.group(1)  # Ej: 20260811T145719
+            # Convertir a formato ISO: 2026-08-11T14:57:19Z
+            sensing_iso = f"{sensing_time[:4]}-{sensing_time[4:6]}-{sensing_time[6:8]}T{sensing_time[9:11]}:{sensing_time[11:13]}:{sensing_time[13:15]}Z"
+            # Usar ventana de +/- 1 minuto para asegurar que capturamos esta escena específica
+            data_filter["timeRange"] = {
+                "from": sensing_iso,
+                "to": sensing_iso
+            }
+            # NO usar mosaickingOrder cuando se especifica scene exacto
+        else:
+            # Si no se puede parsear, usar mosaickingOrder por defecto
+            data_filter["mosaickingOrder"] = "leastCC"
+    else:
+        # Sin scene_id, usar política de menos nubes
+        data_filter["mosaickingOrder"] = "leastCC"
+
     payload = {
         "input": {
             "bounds": {
@@ -196,14 +234,7 @@ def build_process_request(
             },
             "data": [{
                 "type": "sentinel-2-l2a",
-                "dataFilter": {
-                    "timeRange": {
-                        "from": f"{start_date}T00:00:00Z",
-                        "to": f"{end_date}T23:59:59Z"
-                    },
-                    "maxCloudCoverage": max_cloud_coverage,
-                    "mosaickingOrder": "leastCC"
-                }
+                "dataFilter": data_filter
             }]
         },
         "output": {

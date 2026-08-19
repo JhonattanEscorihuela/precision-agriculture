@@ -168,7 +168,8 @@ class ProcessClient:
         width: int = 512,
         height: int = 512,
         max_cloud_coverage: int = 20,
-        polygon_id: Optional[int] = None
+        polygon_id: Optional[int] = None,
+        scene_id: Optional[str] = None
     ) -> bytes:
         """
         Descarga imagen RGB true-color (B04, B03, B02) como PNG.
@@ -181,6 +182,7 @@ class ProcessClient:
             height: Alto de la imagen en píxeles
             max_cloud_coverage: Cobertura máxima de nubes (0-100)
             polygon_id: ID del polígono (para logging)
+            scene_id: Scene ID específico para forzar escena exacta (opcional)
 
         Returns:
             bytes: Contenido del PNG con imagen RGB
@@ -199,7 +201,8 @@ class ProcessClient:
             width=width,
             height=height,
             max_cloud_coverage=max_cloud_coverage,
-            response_format="image/png"
+            response_format="image/png",
+            scene_id=scene_id
         )
 
         headers = {
@@ -230,7 +233,8 @@ class ProcessClient:
         width: int = 512,
         height: int = 512,
         max_cloud_coverage: int = 20,
-        polygon_id: Optional[int] = None
+        polygon_id: Optional[int] = None,
+        scene_id: Optional[str] = None
     ) -> bytes:
         """
         Descarga imagen RGB true-color (B04, B03, B02) como TIFF georreferenciado.
@@ -243,6 +247,7 @@ class ProcessClient:
             height: Alto de la imagen en píxeles
             max_cloud_coverage: Cobertura máxima de nubes (0-100)
             polygon_id: ID del polígono (para logging)
+            scene_id: Scene ID específico para forzar escena exacta (opcional)
 
         Returns:
             bytes: Contenido del GeoTIFF con imagen RGB (3 bandas UINT8)
@@ -261,7 +266,8 @@ class ProcessClient:
             width=width,
             height=height,
             max_cloud_coverage=max_cloud_coverage,
-            response_format="image/tiff"  # ← TIFF en lugar de PNG
+            response_format="image/tiff",  # ← TIFF en lugar de PNG
+            scene_id=scene_id
         )
 
         headers = {

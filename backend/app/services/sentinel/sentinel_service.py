@@ -138,7 +138,8 @@ class SentinelService:
         width: int = 512,
         height: int = 512,
         max_cloud_coverage: int = 20,
-        polygon_id: Optional[int] = None
+        polygon_id: Optional[int] = None,
+        scene_id: Optional[str] = None
     ) -> bytes:
         """
         Descarga imagen RGB true-color como PNG.
@@ -151,6 +152,7 @@ class SentinelService:
             height: Alto en píxeles
             max_cloud_coverage: Cobertura máxima de nubes (0-100)
             polygon_id: ID del polígono (para logging)
+            scene_id: Scene ID específico para forzar escena exacta (opcional)
 
         Returns:
             bytes: Contenido del PNG
@@ -162,7 +164,8 @@ class SentinelService:
             width=width,
             height=height,
             max_cloud_coverage=max_cloud_coverage,
-            polygon_id=polygon_id
+            polygon_id=polygon_id,
+            scene_id=scene_id
         )
 
     async def download_true_color_tiff(
@@ -173,7 +176,8 @@ class SentinelService:
         width: int = 512,
         height: int = 512,
         max_cloud_coverage: int = 20,
-        polygon_id: Optional[int] = None
+        polygon_id: Optional[int] = None,
+        scene_id: Optional[str] = None
     ) -> bytes:
         """
         Descarga imagen RGB true-color como TIFF georreferenciado.
@@ -186,6 +190,7 @@ class SentinelService:
             height: Alto en píxeles
             max_cloud_coverage: Cobertura máxima de nubes (0-100)
             polygon_id: ID del polígono (para logging)
+            scene_id: Scene ID específico para forzar escena exacta (opcional)
 
         Returns:
             bytes: Contenido del TIFF georreferenciado
@@ -197,7 +202,8 @@ class SentinelService:
             width=width,
             height=height,
             max_cloud_coverage=max_cloud_coverage,
-            polygon_id=polygon_id
+            polygon_id=polygon_id,
+            scene_id=scene_id
         )
 
     async def download_scene_classification(
