@@ -7,7 +7,7 @@ import rasterio
 from rasterio.features import geometry_mask
 
 
-CLOUD_CLASSES = (8, 9, 10)
+CLOUD_CLASSES = (7, 8, 9, 10)  # Incluye Unclassified (clase 7) como nube
 CLOUD_SHADOW_CLASS = 3
 MAX_SUITABLE_CLOUD_PERCENTAGE = 20.0
 MIN_VALID_DATA_PERCENTAGE = 80.0
