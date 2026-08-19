@@ -137,7 +137,18 @@ sí. Ver `docs/VALIDACION_CIENTIFICA_OE3_OE4.md`.
 - ✅ Estado de salud basado en datos reales
 - ✅ Imagen satelital RGB como capa de fondo en widgets
 - ✅ Selector de fecha con recarga sincronizada de análisis
+- ✅ **Overlays en mapa con filtro de calidad** (solo adquisiciones aptas)
 - 🔧 PENDIENTE: Comparación temporal multi-fecha, exportación reportes
+
+**Pipeline de calidad de nubes (2026-08-17):**
+- ✅ Nubosidad calculada por parcela (no global) usando SCL
+- ✅ Estados: `suitable` / `caution` / `unsuitable`
+- ✅ NDVI con máscara coherente (nubes, sombras, nodata excluidos)
+- ✅ Puerta de calidad en OE3/OE4 (solo adquisiciones aptas)
+- ✅ Dashboard `/cultivos/[id]` filtra fechas aptas
+- ✅ Mapa home filtra overlays por calidad (fix 2026-08-19)
+- ✅ Scripts de backfill y regeneración
+- ✅ Documentación completa en `docs/CLOUD_QUALITY_AND_NDVI_MASK.md`
 
 ---
 
