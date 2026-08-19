@@ -8,6 +8,7 @@ import type { Polygon } from '@/app/context/PolygonContext';
 import apiClient from '@/lib/axios';
 import type { NDVISummary } from '@/lib/analysisTypes';
 import type { OverlayMode, TextureKernelType } from '@/lib/overlayTypes';
+import { isAnalysisEligible } from '@/lib/acquisitionQuality';
 
 interface MapAnalysisOverlaysOptions {
   mapRef: RefObject<L.Map | null>;
@@ -59,8 +60,13 @@ export default function useMapAnalysisOverlays({
     const pending = latestRequestsRef.current.get(polygonId);
     if (pending) return pending;
     const request = apiClient
-      .get<NDVISummary[]>(`/api/ndvi/polygon/${polygonId}`, { params: { limit: 1 } })
-      .then(({ data }) => data[0] ?? null);
+      .get<NDVISummary[]>(`/api/ndvi/polygon/${polygonId}`, { params: { limit: 100 } })
+      .then(({ data }) => {
+        // Filtrar solo adquisiciones aptas (suitable + cloud_mask_applied)
+        // para evitar mostrar overlays con nubes enmascaradas
+        const suitable = data.filter(isAnalysisEligible);
+        return suitable[0] ?? null;
+      });
     latestRequestsRef.current.set(polygonId, request);
     try {
       const latest = await request;
