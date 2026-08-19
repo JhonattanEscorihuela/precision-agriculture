@@ -69,10 +69,13 @@ export default function TextureOverlayPreview({ ndviResultId, showSatellite, sat
           <p className="rounded-lg border border-violet-200 bg-white/80 p-3 text-sm text-gray-700">{preview.data.interpretation}</p>
           <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-violet-200 bg-white">
             {showSatellite && satelliteData && (
-              <img
+              <Image
                 alt="Imagen satélite de fondo"
                 className="absolute inset-0 h-full w-full object-contain"
+                fill
+                sizes="(min-width: 1024px) 40vw, 90vw"
                 src={satelliteData.image_base64}
+                unoptimized
               />
             )}
             <Image

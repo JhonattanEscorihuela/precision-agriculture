@@ -9,6 +9,7 @@ import rasterio
 import io
 import bcrypt
 from datetime import datetime
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
@@ -41,7 +42,14 @@ async def test_db():
         echo=False
     )
 
+    @event.listens_for(engine.sync_engine, "connect")
+    def enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     async with engine.begin() as conn:
+        await conn.execute(text("PRAGMA foreign_keys=ON"))
         await conn.run_sync(SQLModel.metadata.create_all)
 
     async_session = sessionmaker(
@@ -60,7 +68,8 @@ async def test_user(test_db: AsyncSession):
     user = User(
         email="test@example.com",
         hashed_password=bcrypt.hashpw("test123".encode(), bcrypt.gensalt()).decode(),
-        full_name="Test User"
+        full_name="Test User",
+        created_at=datetime.utcnow().isoformat(),
     )
     test_db.add(user)
     await test_db.commit()
@@ -74,7 +83,10 @@ async def test_polygon(test_db: AsyncSession, test_user):
     polygon = Polygon(
         name="Test Parcela 211",
         coordinates=PARCELA_211,
-        user_id=test_user.id
+        user_id=test_user.id,
+        area=100.0,
+        created_at=datetime.utcnow().isoformat(),
+        updated_at=datetime.utcnow().isoformat(),
     )
     test_db.add(polygon)
     await test_db.commit()
@@ -120,6 +132,31 @@ def generate_synthetic_tiff_band(width: int = 100, height: int = 100, band_type:
     return buf.getvalue()
 
 
+def generate_synthetic_scl_tiff(width: int = 100, height: int = 100) -> bytes:
+    """Genera SCL + dataMask sin nubes y alineado con las bandas sintéticas."""
+    scl = np.full((height, width), 4, dtype=np.uint8)
+    data_mask = np.ones((height, width), dtype=np.uint8)
+
+    buf = io.BytesIO()
+    with rasterio.open(
+        buf,
+        'w',
+        driver='GTiff',
+        height=height,
+        width=width,
+        count=2,
+        dtype=np.uint8,
+        crs='EPSG:4326',
+        transform=rasterio.transform.from_bounds(
+            -67.6, 8.7, -67.5, 8.9, width, height
+        ),
+    ) as dst:
+        dst.write(scl, 1)
+        dst.write(data_mask, 2)
+
+    return buf.getvalue()
+
+
 @pytest.fixture
 async def synthetic_acquisition(test_db: AsyncSession, test_polygon):
     """
@@ -133,6 +170,13 @@ async def synthetic_acquisition(test_db: AsyncSession, test_polygon):
         cloud_coverage=15.0,
         b04_data=generate_synthetic_tiff_band(100, 100, "B04"),
         b08_data=generate_synthetic_tiff_band(100, 100, "B08"),
+        scl_data=generate_synthetic_scl_tiff(100, 100),
+        quality_status="suitable",
+        parcel_cloud_cover=0.0,
+        parcel_shadow_cover=0.0,
+        valid_pixel_percentage=100.0,
+        usable_pixel_percentage=100.0,
+        cloud_method="SCL",
         width=100,
         height=100,
         created_at=datetime.utcnow().isoformat()
@@ -342,7 +386,7 @@ async def test_get_ndvi_by_polygon(test_db: AsyncSession, test_polygon, syntheti
 
     # Verificar
     assert len(ndvi_list) == 1
-    assert ndvi_list[0].polygon_id == test_polygon.id
+    assert ndvi_list[0][0].polygon_id == test_polygon.id
 
 
 @pytest.mark.asyncio
@@ -399,6 +443,9 @@ async def test_cascade_delete_polygon(test_db: AsyncSession, test_user, test_pol
     # Eliminar polígono (debe eliminar NDVI por CASCADE)
     await test_db.delete(test_polygon)
     await test_db.commit()
+    # La cascada ocurre en la BD; limpiar el identity map evita devolver el
+    # objeto NDVI que la sesión aún conservaba en memoria.
+    test_db.expunge_all()
 
     # Verificar que NDVI ya no existe
     ndvi_check = await crud_ndvi.get_ndvi_by_id(

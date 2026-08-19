@@ -4,11 +4,14 @@
 **/*.pyc
 **/__pycache__/
 **/.pytest_cache/
+**/.coverage
 **/.ipynb_checkpoints/
 
 # Ignorar logs y dumps
 *.log
 *.dmp
+backups/
+.tmp-docker-cli-*/
 
 # Evitar subir librerías generadas automáticamente
 **/node_modules/

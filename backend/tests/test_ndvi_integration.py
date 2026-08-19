@@ -16,11 +16,13 @@ from app.models.user import User
 from app.models.polygon import Polygon
 from app.models.acquisition import SentinelAcquisition
 from app.core.security import create_access_token
+from app.database import get_session
 from tests.test_ndvi_model_crud import (
     test_db,
     test_user,
     test_polygon,
-    generate_synthetic_tiff_band
+    generate_synthetic_scl_tiff,
+    generate_synthetic_tiff_band,
 )
 
 
@@ -50,6 +52,19 @@ PARCELA_85 = [
     [-67.5776965, 8.8549892],
     [-67.586587, 8.8508969]
 ]
+
+
+@pytest.fixture(autouse=True)
+def override_application_database(test_db: AsyncSession):
+    """Aísla las rutas FastAPI en la misma SQLite en memoria del test."""
+    from main import app
+
+    async def override_get_session():
+        yield test_db
+
+    app.dependency_overrides[get_session] = override_get_session
+    yield
+    app.dependency_overrides.pop(get_session, None)
 
 
 @pytest.fixture
@@ -112,6 +127,8 @@ async def acquisition_211(test_db: AsyncSession, parcela_211):
         cloud_coverage=12.5,
         b04_data=generate_synthetic_tiff_band(100, 100, "B04"),
         b08_data=generate_synthetic_tiff_band(100, 100, "B08"),
+        scl_data=generate_synthetic_scl_tiff(100, 100),
+        quality_status="suitable",
         width=100,
         height=100,
         created_at=datetime.utcnow().isoformat()
@@ -131,6 +148,8 @@ async def acquisition_217(test_db: AsyncSession, parcela_217):
         cloud_coverage=9.5,
         b04_data=generate_synthetic_tiff_band(100, 100, "B04"),
         b08_data=generate_synthetic_tiff_band(100, 100, "B08"),
+        scl_data=generate_synthetic_scl_tiff(100, 100),
+        quality_status="suitable",
         width=100,
         height=100,
         created_at=datetime.utcnow().isoformat()
@@ -150,6 +169,8 @@ async def acquisition_85(test_db: AsyncSession, parcela_85):
         cloud_coverage=0.4,
         b04_data=generate_synthetic_tiff_band(100, 100, "B04"),
         b08_data=generate_synthetic_tiff_band(100, 100, "B08"),
+        scl_data=generate_synthetic_scl_tiff(100, 100),
+        quality_status="suitable",
         width=100,
         height=100,
         created_at=datetime.utcnow().isoformat()
@@ -341,8 +362,8 @@ async def test_download_ndvi_tiff_endpoint(
         assert src.count == 1  # 1 banda
         assert src.dtypes[0] == "float32"
         ndvi_data = src.read(1)
-        assert ndvi_data.min() >= -1
-        assert ndvi_data.max() <= 1
+        assert np.nanmin(ndvi_data) >= -1
+        assert np.nanmax(ndvi_data) <= 1
 
 
 @pytest.mark.asyncio
@@ -376,7 +397,8 @@ async def test_ndvi_ownership_verification(
     other_user = User(
         email="other@example.com",
         hashed_password=bcrypt.hashpw("test123".encode(), bcrypt.gensalt()).decode(),
-        full_name="Other User"
+        full_name="Other User",
+        created_at=datetime.utcnow().isoformat(),
     )
     test_db.add(other_user)
     await test_db.commit()
@@ -407,7 +429,8 @@ async def test_generate_oe2_evidence_table(
     acquisition_211,
     acquisition_217,
     acquisition_85,
-    auth_headers
+    auth_headers,
+    tmp_path,
 ):
     """
     Test de evidencia OE2: Genera tabla CSV con NDVI de las 3 parcelas SRRG.
@@ -448,7 +471,7 @@ async def test_generate_oe2_evidence_table(
             })
 
     # Generar CSV
-    output_path = "../tasks/tabla_evidencia_oe2.csv"
+    output_path = tmp_path / "tabla_evidencia_oe2.csv"
 
     with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
         fieldnames = [

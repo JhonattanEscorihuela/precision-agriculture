@@ -7,6 +7,9 @@ import io
 import logging
 import numpy as np
 import rasterio
+from rasterio.enums import Resampling
+from rasterio.features import geometry_mask
+from rasterio.warp import reproject, transform_geom
 from typing import Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,13 +86,7 @@ class NDVIService:
             logger.error(f"❌ Acquisition {acquisition_id} no encontrada")
             raise HTTPException(status_code=404, detail="Acquisition not found")
 
-        # 2. Verificar si ya existe NDVI (idempotencia)
-        existing_ndvi = await crud_ndvi.get_ndvi_by_acquisition(db, acquisition_id)
-        if existing_ndvi:
-            logger.info(f"✅ NDVI ya existe (id={existing_ndvi.id}), retornando sin recalcular")
-            return self._format_response(existing_ndvi, acquisition_date=acquisition.acquisition_date)
-
-        # 3. Verificar ownership
+        # 2. Verificar ownership antes de retornar cualquier dato existente.
         polygon = await crud_polygon.get_polygon_by_id(db, acquisition.polygon_id)
         if not polygon or polygon.user_id != user_id:
             logger.error(f"❌ Usuario {user_id} no tiene acceso a acquisition {acquisition_id}")
@@ -98,20 +95,39 @@ class NDVIService:
                 detail="You don't have permission to access this acquisition"
             )
 
+        # 3. Retornar solo resultados que ya tengan aplicada la máscara científica.
+        existing_ndvi = await crud_ndvi.get_ndvi_by_acquisition(db, acquisition_id)
+        if existing_ndvi and existing_ndvi.cloud_mask_applied:
+            logger.info(f"✅ NDVI enmascarado ya existe (id={existing_ndvi.id})")
+            return self._format_response(existing_ndvi, acquisition_date=acquisition.acquisition_date)
+
+        if not acquisition.scl_data:
+            raise HTTPException(
+                status_code=409,
+                detail="SCL mask not available. Acquire the date again before calculating NDVI."
+            )
+
         logger.info(f"📊 Adquisición válida: polygon_id={acquisition.polygon_id}, date={acquisition.acquisition_date}")
 
         # 4. Leer bandas desde BD y calcular NDVI
         try:
-            ndvi_array, nodata_mask, profile = await self._read_and_calculate_ndvi(
+            ndvi_array, invalid_mask, profile, analysis_valid_percentage = await self._read_and_calculate_ndvi(
                 acquisition.b04_data,
-                acquisition.b08_data
+                acquisition.b08_data,
+                acquisition.scl_data,
+                {"type": "Polygon", "coordinates": [polygon.coordinates]},
             )
         except Exception as e:
             logger.error(f"❌ Error calculando NDVI: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error calculating NDVI: {str(e)}")
 
         # 5. Calcular estadísticos
-        stats = self._calculate_statistics(ndvi_array, nodata_mask, acquisition.b04_data, acquisition.b08_data)
+        stats = self._calculate_statistics(
+            ndvi_array,
+            invalid_mask,
+            acquisition.b04_data,
+            acquisition.b08_data,
+        )
         logger.info(f"📈 Estadísticos NDVI: mean={stats['ndvi_mean']:.4f}, min={stats['ndvi_min']:.4f}, max={stats['ndvi_max']:.4f}")
 
         # 6. Convertir NDVI a TIFF bytes
@@ -119,15 +135,28 @@ class NDVIService:
         logger.info(f"💾 NDVI TIFF generado: {len(ndvi_tiff)} bytes")
 
         # 7. Guardar en BD
-        ndvi_result = await crud_ndvi.save_ndvi_result(
-            db=db,
-            acquisition_id=acquisition_id,
-            polygon_id=acquisition.polygon_id,
-            ndvi_tiff=ndvi_tiff,
-            stats=stats,
-            width=acquisition.width,
-            height=acquisition.height
-        )
+        if existing_ndvi:
+            ndvi_result = await crud_ndvi.replace_ndvi_result_with_masked(
+                db=db,
+                ndvi_result=existing_ndvi,
+                ndvi_tiff=ndvi_tiff,
+                stats=stats,
+                width=acquisition.width,
+                height=acquisition.height,
+                analysis_valid_pixel_percentage=analysis_valid_percentage,
+            )
+        else:
+            ndvi_result = await crud_ndvi.save_ndvi_result(
+                db=db,
+                acquisition_id=acquisition_id,
+                polygon_id=acquisition.polygon_id,
+                ndvi_tiff=ndvi_tiff,
+                stats=stats,
+                width=acquisition.width,
+                height=acquisition.height,
+                analysis_valid_pixel_percentage=analysis_valid_percentage,
+                cloud_mask_applied=True,
+            )
 
         logger.info(f"✅ NDVI guardado exitosamente (id={ndvi_result.id})")
         return self._format_response(ndvi_result, acquisition_date=acquisition.acquisition_date)
@@ -135,8 +164,10 @@ class NDVIService:
     async def _read_and_calculate_ndvi(
         self,
         b04_bytes: bytes,
-        b08_bytes: bytes
-    ) -> tuple[np.ndarray, np.ndarray, Dict]:
+        b08_bytes: bytes,
+        scl_bytes: bytes,
+        polygon_geojson: Dict,
+    ) -> tuple[np.ndarray, np.ndarray, Dict, float]:
         """
         Lee bandas B04 y B08 desde bytes TIFF y calcula NDVI.
 
@@ -168,12 +199,65 @@ class NDVIService:
 
         logger.debug(f"📐 Dimensiones: {b04_array.shape}, dtype: {b04_array.dtype}")
 
-        # Crear máscara de píxeles nodata
-        nodata_mask = np.zeros_like(b04_array, dtype=bool)
+        # Crear máscara base de píxeles nodata/no finitos.
+        invalid_mask = ~np.isfinite(b04_array) | ~np.isfinite(b08_array)
         if nodata_b04 is not None:
-            nodata_mask |= (b04_array == nodata_b04)
+            invalid_mask |= (b04_array == nodata_b04)
         if nodata_b08 is not None:
-            nodata_mask |= (b08_array == nodata_b08)
+            invalid_mask |= (b08_array == nodata_b08)
+
+        if crs is None:
+            raise ValueError("B04 raster has no CRS; polygon/SCL mask cannot be aligned")
+
+        polygon_in_raster_crs = transform_geom("EPSG:4326", crs, polygon_geojson)
+        outside_polygon = geometry_mask(
+            [polygon_in_raster_crs],
+            out_shape=b04_array.shape,
+            transform=transform,
+            invert=False,
+        )
+        parcel_pixels = int(np.count_nonzero(~outside_polygon))
+        if parcel_pixels == 0:
+            raise ValueError("Polygon does not intersect the B04/B08 raster")
+        invalid_mask |= outside_polygon
+
+        # Reproyectar SCL/dataMask a la grilla de 10 m de B04/B08 usando vecino
+        # más próximo: las clases categóricas nunca deben interpolarse.
+        with rasterio.open(io.BytesIO(scl_bytes)) as src:
+            if src.count < 2:
+                raise ValueError("SCL TIFF must contain SCL and dataMask bands")
+            if src.crs is None:
+                raise ValueError("SCL raster has no CRS")
+            scl_source = src.read(1)
+            data_mask_source = src.read(2)
+            scl = np.zeros_like(b04_array, dtype=np.uint8)
+            data_mask = np.zeros_like(b04_array, dtype=np.uint8)
+            reproject(
+                source=scl_source,
+                destination=scl,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=transform,
+                dst_crs=crs,
+                resampling=Resampling.nearest,
+                src_nodata=0,
+                dst_nodata=0,
+            )
+            reproject(
+                source=data_mask_source,
+                destination=data_mask,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=transform,
+                dst_crs=crs,
+                resampling=Resampling.nearest,
+                src_nodata=0,
+                dst_nodata=0,
+            )
+
+        invalid_mask |= data_mask == 0
+        invalid_mask |= scl == 0
+        invalid_mask |= np.isin(scl, (3, 8, 9, 10))
 
         # Convertir a float32
         b04 = b04_array.astype(np.float32)
@@ -185,14 +269,14 @@ class NDVIService:
 
         # Calcular NDVI con manejo de división por cero
         denominator = b08 + b04
-        ndvi = np.where(
-            denominator == 0,
-            0.0,  # valor por defecto si suma es cero
-            (b08 - b04) / denominator
+        invalid_mask |= denominator == 0
+        ndvi = np.full(b04.shape, np.nan, dtype=np.float32)
+        np.divide(
+            b08 - b04,
+            denominator,
+            out=ndvi,
+            where=~invalid_mask,
         )
-
-        # Aplicar máscara de nodata
-        ndvi = np.where(nodata_mask, np.nan, ndvi)
 
         # Validar rango [-1, 1] (excluyendo NaN)
         valid_ndvi = ndvi[~np.isnan(ndvi)]
@@ -209,15 +293,21 @@ class NDVIService:
             count=1,
             compress='lzw',
             transform=transform,
-            crs=crs
+            crs=crs,
+            nodata=np.nan,
         )
 
-        return ndvi, nodata_mask, profile
+        valid_inside_parcel = int(np.count_nonzero(~invalid_mask & ~outside_polygon))
+        analysis_valid_percentage = round(
+            100.0 * valid_inside_parcel / parcel_pixels,
+            2,
+        )
+        return ndvi, invalid_mask, profile, analysis_valid_percentage
 
     def _calculate_statistics(
         self,
         ndvi: np.ndarray,
-        nodata_mask: np.ndarray,
+        invalid_mask: np.ndarray,
         b04_bytes: bytes,
         b08_bytes: bytes
     ) -> Dict[str, float]:
@@ -234,7 +324,7 @@ class NDVIService:
 
         Args:
             ndvi: Array NDVI pixel-wise (puede contener NaN)
-            nodata_mask: Máscara de píxeles nodata
+            invalid_mask: Máscara combinada de nodata, geometría, nubes y sombras
             b04_bytes: Banda Red en formato TIFF (para calcular mean correcto)
             b08_bytes: Banda NIR en formato TIFF (para calcular mean correcto)
 
@@ -245,7 +335,7 @@ class NDVIService:
             ValueError: Si no hay píxeles válidos
         """
         # Máscara de píxeles válidos (no NaN, dentro de [-1, 1], no nodata)
-        valid_mask = ~np.isnan(ndvi) & (ndvi >= -1) & (ndvi <= 1) & ~nodata_mask
+        valid_mask = ~np.isnan(ndvi) & (ndvi >= -1) & (ndvi <= 1) & ~invalid_mask
         valid_pixels = ndvi[valid_mask]
 
         if len(valid_pixels) == 0:
@@ -262,14 +352,20 @@ class NDVIService:
         with rasterio.open(io.BytesIO(b08_bytes)) as src:
             b08_array = src.read(1).astype(np.float32)
 
-        b04_mean = b04_array[~nodata_mask].mean()
-        b08_mean = b08_array[~nodata_mask].mean()
+        b04_mean = b04_array[valid_mask].mean()
+        b08_mean = b08_array[valid_mask].mean()
+        mean_denominator = b08_mean + b04_mean
+        if mean_denominator == 0:
+            raise ValueError("Mean reflectance denominator is zero")
 
         return {
-            "ndvi_mean": float((b08_mean - b04_mean) / (b08_mean + b04_mean)),
+            "ndvi_mean": float((b08_mean - b04_mean) / mean_denominator),
             "ndvi_min": float(np.min(valid_pixels)),
             "ndvi_max": float(np.max(valid_pixels)),
-            "ndvi_std": float(np.std(valid_pixels))
+            "ndvi_std": float(np.std(valid_pixels)),
+            "ndvi_median": float(np.median(valid_pixels)),
+            "ndvi_p10": float(np.percentile(valid_pixels, 10)),
+            "ndvi_p90": float(np.percentile(valid_pixels, 90)),
         }
 
     def _ndvi_to_tiff(self, ndvi: np.ndarray, profile: Dict) -> bytes:
@@ -325,7 +421,9 @@ class NDVIService:
                 "ndvi_p10": ndvi_result.ndvi_p10,
                 "ndvi_p90": ndvi_result.ndvi_p90,
                 "width": ndvi_result.width,
-                "height": ndvi_result.height
+                "height": ndvi_result.height,
+                "analysis_valid_pixel_percentage": ndvi_result.analysis_valid_pixel_percentage,
+                "cloud_mask_applied": ndvi_result.cloud_mask_applied,
             }
         }
 

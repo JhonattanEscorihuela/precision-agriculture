@@ -23,8 +23,9 @@ from app.schemas.sentinel import (
     AcquireBandsResponse
 )
 from app.schemas.sentinel_test import SentinelTestRequest
-from app.crud.polygon import get_polygon_by_id
 from app.core.security import get_current_user
+from app.core.ownership import require_owned_polygon
+from app.models.user import User
 
 
 # ⚠️ SEGURIDAD: Router protegido con JWT
@@ -52,7 +53,8 @@ def _build_geojson_geometry(coordinates: list) -> dict:
 @router.post("/check-availability", response_model=AvailabilityResponse)
 async def check_availability(
     request: AvailabilityCheckRequest,
-    db: AsyncSession = Depends(get_session)
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Verifica si hay imágenes Sentinel-2 disponibles para un polígono y rango de fechas.
@@ -63,9 +65,7 @@ async def check_availability(
     - **max_cloud_coverage**: Cobertura máxima de nubes (0-100)
     """
     # Obtener el polígono de la base de datos
-    polygon = await get_polygon_by_id(db, request.polygon_id)
-    if not polygon:
-        raise HTTPException(status_code=404, detail="Polygon not found")
+    polygon = await require_owned_polygon(db, request.polygon_id, current_user.id)
 
     # Construir geometría GeoJSON
     geojson_geometry = _build_geojson_geometry(polygon.coordinates)
@@ -98,7 +98,8 @@ async def check_availability(
 @router.post("/download/ndvi")
 async def download_ndvi(
     request: NDVIDownloadRequest,
-    db: AsyncSession = Depends(get_session)
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Descarga imagen NDVI calculada para un polígono como GeoTIFF.
@@ -122,9 +123,7 @@ async def download_ndvi(
     Retorna un archivo GeoTIFF con valores NDVI en formato FLOAT32.
     """
     # Obtener el polígono de la base de datos
-    polygon = await get_polygon_by_id(db, request.polygon_id)
-    if not polygon:
-        raise HTTPException(status_code=404, detail="Polygon not found")
+    polygon = await require_owned_polygon(db, request.polygon_id, current_user.id)
 
     # Construir geometría GeoJSON
     geojson_geometry = _build_geojson_geometry(polygon.coordinates)
@@ -162,7 +161,8 @@ async def download_ndvi(
 @router.post("/download/bands")
 async def download_bands(
     request: BandsDownloadRequest,
-    db: AsyncSession = Depends(get_session)
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Descarga bandas espectrales específicas de Sentinel-2 como GeoTIFF multi-banda.
@@ -194,9 +194,7 @@ async def download_bands(
         raise HTTPException(status_code=400, detail="At least one band must be specified")
 
     # Obtener el polígono de la base de datos
-    polygon = await get_polygon_by_id(db, request.polygon_id)
-    if not polygon:
-        raise HTTPException(status_code=404, detail="Polygon not found")
+    polygon = await require_owned_polygon(db, request.polygon_id, current_user.id)
 
     # Construir geometría GeoJSON
     geojson_geometry = _build_geojson_geometry(polygon.coordinates)
@@ -237,7 +235,8 @@ async def download_bands(
 @router.post("/download/true-color")
 async def download_true_color(
     request: NDVIDownloadRequest,
-    db: AsyncSession = Depends(get_session)
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Descarga imagen RGB true-color (B04, B03, B02) como PNG.
@@ -255,9 +254,7 @@ async def download_true_color(
     Retorna un archivo PNG con la imagen RGB.
     """
     # Obtener el polígono de la base de datos
-    polygon = await get_polygon_by_id(db, request.polygon_id)
-    if not polygon:
-        raise HTTPException(status_code=404, detail="Polygon not found")
+    polygon = await require_owned_polygon(db, request.polygon_id, current_user.id)
 
     # Construir geometría GeoJSON
     geojson_geometry = _build_geojson_geometry(polygon.coordinates)
@@ -426,7 +423,8 @@ async def get_available_dates(
     start_date: str,
     end_date: str,
     max_cloud: int = 20,
-    db: AsyncSession = Depends(get_session)
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """
     OE1 - Obtiene fechas con imágenes Sentinel-2 disponibles para un polígono.
@@ -453,9 +451,7 @@ async def get_available_dates(
     from app.crud.acquisition import get_acquisitions_by_polygon
 
     # Obtener el polígono de la base de datos
-    polygon = await get_polygon_by_id(db, polygon_id)
-    if not polygon:
-        raise HTTPException(status_code=404, detail=f"Polygon {polygon_id} not found")
+    polygon = await require_owned_polygon(db, polygon_id, current_user.id)
 
     # Construir geometría GeoJSON
     geojson_geometry = _build_geojson_geometry(polygon.coordinates)
@@ -477,6 +473,7 @@ async def get_available_dates(
 
         # Mapear acquisition_id por fecha para consultar NDVIs
         acquisition_id_by_date = {acq.acquisition_date: acq.id for acq in acquisitions}
+        acquisition_by_date = {acq.acquisition_date: acq for acq in acquisitions}
 
         # Obtener NDVIs ya calculados (bulk query - resuelve N+1)
         from app.crud.ndvi import get_ndvi_by_acquisitions_bulk
@@ -490,10 +487,16 @@ async def get_available_dates(
         # Marcar fechas adquiridas y con NDVI calculado
         date_infos = []
         for d in dates:
+            acquisition = acquisition_by_date.get(d["date"])
             date_infos.append(DateInfo(
                 **d,
                 acquired=(d["date"] in acquired_dates),
-                ndvi_calculated=(d["date"] in ndvi_calculated_dates)
+                ndvi_calculated=(d["date"] in ndvi_calculated_dates),
+                parcel_cloud_cover=(acquisition.parcel_cloud_cover if acquisition else None),
+                parcel_shadow_cover=(acquisition.parcel_shadow_cover if acquisition else None),
+                valid_pixel_percentage=(acquisition.valid_pixel_percentage if acquisition else None),
+                usable_pixel_percentage=(acquisition.usable_pixel_percentage if acquisition else None),
+                quality_status=(acquisition.quality_status if acquisition else None),
             ))
 
         return AvailableDatesResponse(
@@ -513,7 +516,8 @@ async def get_available_dates(
 @router.post("/acquire", response_model=AcquireBandsResponse)
 async def acquire_bands(
     request: AcquireBandsRequest,
-    db: AsyncSession = Depends(get_session)
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """
     OE1 - Adquiere bandas B04 (Red) y B08 (NIR) para una fecha específica.
@@ -556,13 +560,7 @@ async def acquire_bands(
     logger.info(f"🚀 [acquire_bands] START - polygon_id={request.polygon_id}, date={request.date}")
 
     # Obtener el polígono de la base de datos
-    polygon = await get_polygon_by_id(db, request.polygon_id)
-    if not polygon:
-        logger.error(f"❌ [acquire_bands] Polygon {request.polygon_id} not found")
-        raise HTTPException(
-            status_code=404,
-            detail=f"Polygon {request.polygon_id} not found"
-        )
+    polygon = await require_owned_polygon(db, request.polygon_id, current_user.id)
 
     logger.info(f"✅ [acquire_bands] Polygon found: {polygon.name}")
 
@@ -581,7 +579,8 @@ async def acquire_bands(
             db_session=db,
             width=request.width,
             height=request.height,
-            max_cloud_coverage=20
+            max_cloud_coverage=20,
+            scene_id=request.scene_id
         )
 
         logger.info(f"✅ [acquire_bands] Success - acquisition_id={result.get('acquisition_id')}, already_existed={result.get('already_existed', False)}")

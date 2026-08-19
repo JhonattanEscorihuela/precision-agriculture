@@ -20,7 +20,7 @@ export default function CultivosPage() {
 
     // Obtener estado de salud real basado en NDVI
     const polygonIds = polygons.map(p => p.id);
-    const { health, isLoading: isLoadingHealth } = usePolygonHealth(polygonIds);
+    const { health } = usePolygonHealth(polygonIds);
 
     const handleEdit = (id: number, currentName: string) => {
         setEditingId(id);

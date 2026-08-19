@@ -10,6 +10,7 @@ from datetime import datetime
 from .auth import SentinelAuth
 from .stac_client import STACClient
 from .process_client import ProcessClient
+from .geometry import calculate_optimal_dimensions
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,26 @@ class SentinelService:
             polygon_id=polygon_id
         )
 
+    async def download_scene_classification(
+        self,
+        polygon_geojson: Dict,
+        start_date: str,
+        end_date: str,
+        width: int = 512,
+        height: int = 512,
+        max_cloud_coverage: int = 20,
+        polygon_id: Optional[int] = None
+    ) -> bytes:
+        """Descarga SCL y dataMask para calcular nubosidad dentro de la parcela."""
+        return await self.process_client.download_scene_classification(
+            polygon_geojson=polygon_geojson,
+            start_date=start_date,
+            end_date=end_date,
+            width=width,
+            height=height,
+            max_cloud_coverage=max_cloud_coverage,
+            polygon_id=polygon_id
+        )
     async def check_availability(
         self,
         polygon_geojson: Dict,
@@ -233,7 +254,8 @@ class SentinelService:
         db_session = None,
         width: int = 512,
         height: int = 512,
-        max_cloud_coverage: int = 20
+        max_cloud_coverage: int = 20,
+        scene_id: Optional[str] = None
     ) -> Dict:
         """
         OE1 - Descarga bandas B04 y B08 y las guarda en la base de datos.
@@ -268,11 +290,46 @@ class SentinelService:
             existing = await get_acquisition_by_polygon_and_date(db_session, polygon_id, date)
             if existing:
                 logger.warning(f"⚠️  Ya existe adquisición para polígono {polygon_id} en {date}")
+                if existing.scl_data is None or existing.parcel_cloud_cover is None:
+                    logger.info("☁️  Completando métricas SCL faltantes de la adquisición existente...")
+                    scl_width, scl_height = calculate_optimal_dimensions(
+                        polygon_coords,
+                        max_resolution_m_per_px=20.0,
+                    )
+                    scl_bytes = await self.download_scene_classification(
+                        polygon_geojson=polygon_geojson,
+                        start_date=date,
+                        end_date=date,
+                        width=scl_width,
+                        height=scl_height,
+                        max_cloud_coverage=max_cloud_coverage,
+                        polygon_id=polygon_id
+                    )
+                    from app.services.cloud_coverage_service import calculate_parcel_cloud_coverage
+                    metrics = calculate_parcel_cloud_coverage(scl_bytes, polygon_geojson)
+                    existing.scl_data = scl_bytes
+                    existing.parcel_cloud_cover = metrics["parcel_cloud_cover"]
+                    existing.parcel_shadow_cover = metrics["parcel_shadow_cover"]
+                    existing.valid_pixel_percentage = metrics["valid_pixel_percentage"]
+                    existing.usable_pixel_percentage = metrics["usable_pixel_percentage"]
+                    existing.quality_status = metrics["quality_status"]
+                    existing.cloud_method = "SCL"
+                    existing.scene_id = existing.scene_id or scene_id
+                    db_session.add(existing)
+                    await db_session.commit()
+                    await db_session.refresh(existing)
                 return {
                     "acquisition_id": existing.id,
                     "polygon_id": existing.polygon_id,
                     "date": existing.acquisition_date,
                     "cloud_coverage": existing.cloud_coverage,
+                    "scene_id": existing.scene_id,
+                    "parcel_cloud_cover": existing.parcel_cloud_cover,
+                    "parcel_shadow_cover": existing.parcel_shadow_cover,
+                    "valid_pixel_percentage": existing.valid_pixel_percentage,
+                    "usable_pixel_percentage": existing.usable_pixel_percentage,
+                    "quality_status": existing.quality_status,
+                    "cloud_method": existing.cloud_method,
                     "size_b04_kb": len(existing.b04_data) / 1024,
                     "size_b08_kb": len(existing.b08_data) / 1024,
                     "already_existed": True
@@ -316,21 +373,58 @@ class SentinelService:
         if b08_size_mb > 10:
             raise ValueError(f"B08 excede 10MB: {b08_size_mb:.2f} MB")
 
-        # Obtener cloud_coverage del día desde STAC
-        logger.info("☁️  Obteniendo cloud_coverage desde STAC...")
-        available_dates = await self.get_available_dates(
-            polygon_coords=polygon_coords,
+        # Calcular nubosidad real dentro del polígono con SCL y dataMask.
+        logger.info("☁️  Calculando nubosidad SCL dentro de la parcela...")
+        scl_width, scl_height = calculate_optimal_dimensions(
+            polygon_coords,
+            max_resolution_m_per_px=20.0,
+        )
+        scl_bytes = await self.download_scene_classification(
+            polygon_geojson=polygon_geojson,
             start_date=date,
             end_date=date,
-            max_cloud=100
+            width=scl_width,
+            height=scl_height,
+            max_cloud_coverage=max_cloud_coverage,
+            polygon_id=polygon_id
         )
+        from app.services.cloud_coverage_service import calculate_parcel_cloud_coverage
+        parcel_quality = calculate_parcel_cloud_coverage(scl_bytes, polygon_geojson)
 
-        cloud_coverage = 0.0
+        # Obtener cloud_coverage del día desde STAC
+        logger.info("☁️  Obteniendo cloud_coverage desde STAC...")
+        try:
+            available_dates = await self.get_available_dates(
+                polygon_coords=polygon_coords,
+                start_date=date,
+                end_date=date,
+                max_cloud=100
+            )
+        except Exception as metadata_error:
+            logger.warning(
+                "No se pudo recuperar metadata STAC para %s; "
+                "las bandas y métricas SCL sí son válidas: %s",
+                date,
+                metadata_error,
+            )
+            available_dates = []
+
+        cloud_coverage = None
         if available_dates:
-            cloud_coverage = available_dates[0]["cloud_cover"]
+            selected_scene = available_dates[0]
+            cloud_coverage = selected_scene["cloud_cover"]
+            resolved_scene_id = selected_scene.get("scene_id")
+            if scene_id and resolved_scene_id and scene_id != resolved_scene_id:
+                logger.warning(
+                    "La escena solicitada %s no coincide con la escena leastCC %s; "
+                    "se usará la resuelta por STAC",
+                    scene_id,
+                    resolved_scene_id,
+                )
+            scene_id = resolved_scene_id or scene_id
             logger.info(f"   Cloud coverage: {cloud_coverage}%")
         else:
-            logger.warning(f"⚠️  No se encontró cloud_coverage para {date}, usando 0.0")
+            logger.warning(f"⚠️  No se encontró cloud_coverage global para {date}; se guardará NULL")
 
         # Crear registro en BD
         if db_session:
@@ -339,10 +433,18 @@ class SentinelService:
                 polygon_id=polygon_id,
                 acquisition_date=date,
                 cloud_coverage=cloud_coverage,
+                scene_id=scene_id,
+                parcel_cloud_cover=parcel_quality["parcel_cloud_cover"],
+                parcel_shadow_cover=parcel_quality["parcel_shadow_cover"],
+                valid_pixel_percentage=parcel_quality["valid_pixel_percentage"],
+                usable_pixel_percentage=parcel_quality["usable_pixel_percentage"],
+                quality_status=parcel_quality["quality_status"],
+                cloud_method="SCL",
                 width=width,
                 height=height,
                 b04_data=b04_bytes,
                 b08_data=b08_bytes,
+                scl_data=scl_bytes,
                 created_at=datetime.utcnow().isoformat()
             )
 
@@ -354,6 +456,13 @@ class SentinelService:
                 "polygon_id": acquisition.polygon_id,
                 "date": acquisition.acquisition_date,
                 "cloud_coverage": acquisition.cloud_coverage,
+                "scene_id": acquisition.scene_id,
+                "parcel_cloud_cover": acquisition.parcel_cloud_cover,
+                "parcel_shadow_cover": acquisition.parcel_shadow_cover,
+                "valid_pixel_percentage": acquisition.valid_pixel_percentage,
+                "usable_pixel_percentage": acquisition.usable_pixel_percentage,
+                "quality_status": acquisition.quality_status,
+                "cloud_method": acquisition.cloud_method,
                 "size_b04_kb": len(b04_bytes) / 1024,
                 "size_b08_kb": len(b08_bytes) / 1024,
                 "already_existed": False
@@ -365,6 +474,9 @@ class SentinelService:
                 "polygon_id": polygon_id,
                 "date": date,
                 "cloud_coverage": cloud_coverage,
+                "scene_id": scene_id,
+                **parcel_quality,
+                "cloud_method": "SCL",
                 "size_b04_kb": len(b04_bytes) / 1024,
                 "size_b08_kb": len(b08_bytes) / 1024
             }

@@ -120,6 +120,24 @@ function evaluatePixel(sample) {
 """
 
 
+def build_scl_evalscript() -> str:
+    """Construye un TIFF UINT8 con las bandas SCL y dataMask."""
+    return """
+//VERSION=3
+function setup() {
+  return {
+    input: ["SCL", "dataMask"],
+    output: {
+      bands: 2,
+      sampleType: "UINT8"
+    }
+  }
+}
+function evaluatePixel(sample) {
+  return [sample.SCL, sample.dataMask];
+}
+"""
+
 def build_check_availability_evalscript() -> str:
     """
     Construye evalscript simple para verificar disponibilidad.
@@ -183,7 +201,8 @@ def build_process_request(
                         "from": f"{start_date}T00:00:00Z",
                         "to": f"{end_date}T23:59:59Z"
                     },
-                    "maxCloudCoverage": max_cloud_coverage
+                    "maxCloudCoverage": max_cloud_coverage,
+                    "mosaickingOrder": "leastCC"
                 }
             }]
         },

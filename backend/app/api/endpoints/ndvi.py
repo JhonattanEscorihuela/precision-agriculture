@@ -6,12 +6,14 @@ Solo orquestación, lógica en app/services/ndvi_service.py
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
 import io
 import logging
 
 from app.database import get_session
 from app.models.user import User
+from app.models.acquisition import SentinelAcquisition
 from app.core.security import get_current_user
 from app.schemas.ndvi import (
     NDVICalculateRequest,
@@ -153,6 +155,31 @@ async def get_ndvi_by_polygon(
         limit=limit
     )
 
+    acquisition_ids = [ndvi.acquisition_id for ndvi, _ in ndvi_tuples]
+    quality_by_acquisition = {}
+    if acquisition_ids:
+        quality_rows = await db.execute(
+            select(
+                SentinelAcquisition.id,
+                SentinelAcquisition.quality_status,
+                SentinelAcquisition.parcel_cloud_cover,
+                SentinelAcquisition.usable_pixel_percentage,
+            ).where(SentinelAcquisition.id.in_(acquisition_ids))
+        )
+        quality_by_acquisition = {
+            acquisition_id: {
+                "quality_status": quality_status,
+                "parcel_cloud_cover": parcel_cloud_cover,
+                "usable_pixel_percentage": usable_pixel_percentage,
+            }
+            for (
+                acquisition_id,
+                quality_status,
+                parcel_cloud_cover,
+                usable_pixel_percentage,
+            ) in quality_rows.all()
+        }
+
     # Formatear respuestas
     return [
         NDVIStatsResponse(
@@ -165,8 +192,14 @@ async def get_ndvi_by_polygon(
             ndvi_min=ndvi.ndvi_min,
             ndvi_max=ndvi.ndvi_max,
             ndvi_std=ndvi.ndvi_std,
+            ndvi_median=ndvi.ndvi_median,
+            ndvi_p10=ndvi.ndvi_p10,
+            ndvi_p90=ndvi.ndvi_p90,
             width=ndvi.width,
-            height=ndvi.height
+            height=ndvi.height,
+            analysis_valid_pixel_percentage=ndvi.analysis_valid_pixel_percentage,
+            cloud_mask_applied=ndvi.cloud_mask_applied,
+            **quality_by_acquisition.get(ndvi.acquisition_id, {}),
         )
         for ndvi, acq_date in ndvi_tuples
     ]

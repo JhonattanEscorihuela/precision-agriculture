@@ -7,14 +7,12 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-# Activar queries SQL SIN duplicados
-# (funciona porque echo=False, solo hay un handler)
-logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
-
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.endpoints import polygons, auth, sentinel, ndvi, ndvi_batch, segmentation, texture, analysis, phenology  # Importa los routers
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import init_db
+from app.database import get_session, init_db
 
 # Importar modelos para que SQLModel los registre
 from app.models.user import User
@@ -30,6 +28,13 @@ app = FastAPI()
 # ⚠️ SEGURIDAD: Lista específica de orígenes permitidos (NO "*")
 # Configurado via CORS_ORIGINS en .env (separados por comas)
 from app.core.config import settings as config_settings
+
+sql_log_level = getattr(
+    logging,
+    config_settings.SQL_LOG_LEVEL.upper(),
+    logging.WARNING,
+)
+logging.getLogger("sqlalchemy.engine").setLevel(sql_log_level)
 
 origins = [origin.strip() for origin in config_settings.CORS_ORIGINS.split(",")]
 
@@ -94,10 +99,17 @@ async def validate_environment():
         raise RuntimeError(error_msg)
 
     logging.info("✅ Environment variables validated successfully")
-    logging.info(f"   DATABASE_URL: {settings.DATABASE_URL[:30]}...")
+    logging.info("   DATABASE_URL configured")
     logging.info(f"   JWT Algorithm: {settings.ALGORITHM}")
     logging.info(f"   Token expiration: {settings.ACCESS_TOKEN_EXPIRE_MINUTES} minutes")
 
 @app.get("/")
 def read_root():
     return {"message": "Backend is running"}
+
+
+@app.get("/health", include_in_schema=False)
+async def read_health(db: AsyncSession = Depends(get_session)):
+    """Readiness probe: the API and its database must both respond."""
+    await db.execute(text("SELECT 1"))
+    return {"status": "ok"}

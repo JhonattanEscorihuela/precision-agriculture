@@ -39,6 +39,22 @@ class NDVIStatsResponse(BaseModel):
     ndvi_p90: Optional[float] = Field(None, ge=-1, le=1, description="Percentil 90 NDVI")
     width: int = Field(..., description="Ancho del raster en píxeles")
     height: int = Field(..., description="Alto del raster en píxeles")
+    analysis_valid_pixel_percentage: Optional[float] = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Porcentaje de la parcela usado después de excluir nubes, sombras y nodata"
+    )
+    cloud_mask_applied: bool = Field(
+        default=False,
+        description="Confirma que se aplicó la máscara SCL al NDVI"
+    )
+    quality_status: Optional[str] = Field(
+        None,
+        description="Aptitud local de la adquisición: suitable, caution o unsuitable"
+    )
+    parcel_cloud_cover: Optional[float] = Field(None, ge=0, le=100)
+    usable_pixel_percentage: Optional[float] = Field(None, ge=0, le=100)
 
     class Config:
         json_schema_extra = {

@@ -4,7 +4,7 @@ Tests para el servicio de adquisición Sentinel-2.
 
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from app.services.sentinel_service import SentinelService
+from app.services.sentinel import SentinelService
 
 
 @pytest.fixture
@@ -39,18 +39,20 @@ def sample_polygon_geojson():
 
 def test_sentinel_service_initialization(sentinel_service):
     """Verifica que el servicio se inicialice correctamente."""
-    assert sentinel_service.client_id == "test_client_id"
-    assert sentinel_service.client_secret == "test_client_secret"
-    assert sentinel_service._access_token is None
+    assert sentinel_service.auth.client_id == "test_client_id"
+    assert sentinel_service.auth.client_secret == "test_client_secret"
+    assert sentinel_service.auth.token is None
 
 
-def test_sentinel_service_missing_credentials():
+def test_sentinel_service_missing_credentials(monkeypatch):
     """Verifica que falle sin credenciales."""
+    monkeypatch.delenv("SENTINEL_CLIENT_ID", raising=False)
+    monkeypatch.delenv("SENTINEL_CLIENT_SECRET", raising=False)
     with pytest.raises(ValueError, match="Missing credentials"):
         SentinelService()
 
 
-@patch('app.services.sentinel_service.OAuth2Session')
+@patch('app.services.sentinel.auth.OAuth2Session')
 def test_authenticate_success(mock_oauth_session, sentinel_service):
     """Verifica autenticación exitosa."""
     # Mock del token response
@@ -64,35 +66,19 @@ def test_authenticate_success(mock_oauth_session, sentinel_service):
 
     # Verificar
     assert token == "test_token_123"
-    assert sentinel_service._access_token == "test_token_123"
+    assert sentinel_service.auth.token == "test_token_123"
     mock_session_instance.fetch_token.assert_called_once()
 
 
 @pytest.mark.asyncio
-@patch('httpx.AsyncClient')
-@patch.object(SentinelService, 'authenticate')
 async def test_download_ndvi_success(
-    mock_auth,
-    mock_httpx_client,
     sentinel_service,
     sample_polygon_geojson
 ):
     """Verifica descarga exitosa de NDVI."""
-    # Mock de autenticación
-    mock_auth.return_value = "test_token"
-    sentinel_service._access_token = "test_token"
-
-    # Mock de respuesta HTTP
-    mock_response = Mock()
-    mock_response.content = b"fake_tiff_data"
-    mock_response.raise_for_status = Mock()
-
-    mock_client_instance = Mock()
-    mock_client_instance.post = AsyncMock(return_value=mock_response)
-    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
-    mock_client_instance.__aexit__ = AsyncMock()
-
-    mock_httpx_client.return_value = mock_client_instance
+    sentinel_service.process_client.download_ndvi = AsyncMock(
+        return_value=b"fake_tiff_data"
+    )
 
     # Ejecutar descarga
     result = await sentinel_service.download_ndvi(
@@ -103,34 +89,18 @@ async def test_download_ndvi_success(
 
     # Verificar
     assert result == b"fake_tiff_data"
-    mock_client_instance.post.assert_called_once()
+    sentinel_service.process_client.download_ndvi.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-@patch('httpx.AsyncClient')
-@patch.object(SentinelService, 'authenticate')
 async def test_download_bands_success(
-    mock_auth,
-    mock_httpx_client,
     sentinel_service,
     sample_polygon_geojson
 ):
     """Verifica descarga exitosa de bandas específicas."""
-    # Mock de autenticación
-    mock_auth.return_value = "test_token"
-    sentinel_service._access_token = "test_token"
-
-    # Mock de respuesta HTTP
-    mock_response = Mock()
-    mock_response.content = b"fake_multiban_tiff_data"
-    mock_response.raise_for_status = Mock()
-
-    mock_client_instance = Mock()
-    mock_client_instance.post = AsyncMock(return_value=mock_response)
-    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
-    mock_client_instance.__aexit__ = AsyncMock()
-
-    mock_httpx_client.return_value = mock_client_instance
+    sentinel_service.process_client.download_bands = AsyncMock(
+        return_value=b"fake_multiban_tiff_data"
+    )
 
     # Ejecutar descarga
     result = await sentinel_service.download_bands(
@@ -142,40 +112,23 @@ async def test_download_bands_success(
 
     # Verificar
     assert result == b"fake_multiban_tiff_data"
-    mock_client_instance.post.assert_called_once()
-
-    # Verificar que el evalscript incluya las bandas solicitadas
-    call_args = mock_client_instance.post.call_args
-    request_payload = call_args.kwargs['json']
-    assert 'B04' in request_payload['evalscript']
-    assert 'B08' in request_payload['evalscript']
+    call = sentinel_service.process_client.download_bands.await_args
+    assert call.kwargs["bands"] == ["B04", "B08"]
 
 
 @pytest.mark.asyncio
-@patch('httpx.AsyncClient')
-@patch.object(SentinelService, 'authenticate')
 async def test_check_availability_available(
-    mock_auth,
-    mock_httpx_client,
     sentinel_service,
     sample_polygon_geojson
 ):
     """Verifica check de disponibilidad cuando hay imágenes."""
-    # Mock de autenticación
-    mock_auth.return_value = "test_token"
-    sentinel_service._access_token = "test_token"
-
-    # Mock de respuesta HTTP exitosa
-    mock_response = Mock()
-    mock_response.content = b"test_data"
-    mock_response.raise_for_status = Mock()
-
-    mock_client_instance = Mock()
-    mock_client_instance.post = AsyncMock(return_value=mock_response)
-    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
-    mock_client_instance.__aexit__ = AsyncMock()
-
-    mock_httpx_client.return_value = mock_client_instance
+    sentinel_service.process_client.check_availability = AsyncMock(
+        return_value={
+            "available": True,
+            "date_range": {"from": "2024-01-15", "to": "2024-01-20"},
+            "message": "Imagery available",
+        }
+    )
 
     # Ejecutar verificación
     result = await sentinel_service.check_availability(

@@ -16,6 +16,7 @@ from app.crud import texture as crud_texture
 from app.crud import segmentation as crud_segmentation
 from app.crud import ndvi as crud_ndvi
 from app.crud import polygon as crud_polygon
+from app.crud import acquisition as crud_acquisition
 
 logger = logging.getLogger(__name__)
 
@@ -89,19 +90,13 @@ class TextureService:
         """
         logger.info(f"🌾 Iniciando análisis de textura para segmentation_id={segmentation_result_id}")
 
-        # 1. IDEMPOTENCIA
-        existing = await crud_texture.get_by_segmentation_result_id(db, segmentation_result_id)
-        if len(existing) == 3:
-            logger.info(f"✅ Descriptores ya existen (3/3), retornando sin recalcular")
-            return [self._format_response(d) for d in existing]
-
-        # 2. OBTENER SegmentationResult
+        # 1. OBTENER SegmentationResult
         segmentation = await crud_segmentation.get_by_id(db, segmentation_result_id)
         if not segmentation:
             logger.error(f"❌ SegmentationResult {segmentation_result_id} no encontrado")
             raise HTTPException(status_code=404, detail="Segmentation not found")
 
-        # 3. OWNERSHIP CHECK
+        # 2. OWNERSHIP CHECK
         polygon = await crud_polygon.get_polygon_by_id(db, segmentation.polygon_id)
         if not polygon or polygon.user_id != user_id:
             logger.error(f"❌ Usuario {user_id} no tiene acceso a segmentation {segmentation_result_id}")
@@ -110,15 +105,38 @@ class TextureService:
                 detail="You don't have permission to access this segmentation"
             )
 
-        # 4. OBTENER NDVIResult
+        # 3. OBTENER NDVIResult
         ndvi_result = await crud_ndvi.get_ndvi_by_id(db, segmentation.ndvi_result_id)
         if not ndvi_result:
             logger.error(f"❌ NDVIResult {segmentation.ndvi_result_id} no encontrado")
             raise HTTPException(status_code=404, detail="NDVI result not found")
 
+        # 4. OE4 solo acepta la cadena trazable: calidad apta + NDVI SCL.
+        acquisition = await crud_acquisition.get_acquisition_by_id(
+            db,
+            ndvi_result.acquisition_id,
+        )
+        if not ndvi_result.cloud_mask_applied:
+            raise HTTPException(
+                status_code=409,
+                detail="NDVI must be recalculated with the SCL cloud mask before OE4.",
+            )
+        if not acquisition or acquisition.quality_status != "suitable":
+            quality = acquisition.quality_status if acquisition else "unknown"
+            raise HTTPException(
+                status_code=409,
+                detail=f"Observation quality is {quality}; OE4 requires suitable quality.",
+            )
+
+        # 5. IDEMPOTENCIA después de seguridad y calidad.
+        existing = await crud_texture.get_by_segmentation_result_id(db, segmentation_result_id)
+        if len(existing) == 3:
+            logger.info(f"✅ Descriptores ya existen (3/3), retornando sin recalcular")
+            return [self._format_response(d) for d in existing]
+
         logger.info(f"📊 Segmentación válida: polygon_id={segmentation.polygon_id}, threshold={segmentation.threshold_used}")
 
-        # 5. LEER RASTER NDVI (Sección 4.1 - convolución sobre NDVI completo)
+        # 6. LEER RASTER NDVI (Sección 4.1 - convolución sobre NDVI completo)
         with rasterio.open(io.BytesIO(ndvi_result.ndvi_tiff)) as src:
             ndvi_array = src.read(1)  # float32, rango [-1, 1]
             profile = src.profile.copy()

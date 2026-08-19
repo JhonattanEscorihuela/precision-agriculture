@@ -7,8 +7,14 @@ import DateBadgeSkeleton from '../atoms/DateBadgeSkeleton';
 interface DateInfo {
   date: string;
   cloud_cover: number;
+  scene_id: string;
   acquired: boolean;
   ndvi_calculated: boolean;
+  parcel_cloud_cover: number | null;
+  parcel_shadow_cover: number | null;
+  valid_pixel_percentage: number | null;
+  usable_pixel_percentage: number | null;
+  quality_status: 'suitable' | 'caution' | 'unsuitable' | null;
 }
 
 interface DateSelectorProps {
@@ -68,6 +74,12 @@ export default function DateSelector({
             isSelected={selectedDate === dateInfo.date}
             isAcquired={dateInfo.acquired}
             ndviCalculated={dateInfo.ndvi_calculated}
+            sceneCloudCover={dateInfo.cloud_cover}
+            parcelCloudCover={dateInfo.parcel_cloud_cover}
+            parcelShadowCover={dateInfo.parcel_shadow_cover}
+            validPixelPercentage={dateInfo.valid_pixel_percentage}
+            usablePixelPercentage={dateInfo.usable_pixel_percentage}
+            qualityStatus={dateInfo.quality_status}
             onClick={() => onSelectDate(dateInfo.date)}
           />
         ))}

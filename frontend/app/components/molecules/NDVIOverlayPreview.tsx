@@ -55,10 +55,13 @@ export default function NDVIOverlayPreview({ acquisitionId, showSatellite, satel
       </div>
       <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-emerald-200 bg-white">
         {showSatellite && satelliteData && (
-          <img
+          <Image
             alt="Imagen satélite de fondo"
             className="absolute inset-0 h-full w-full object-contain"
+            fill
+            sizes="(min-width: 1024px) 40vw, 90vw"
             src={satelliteData.image_base64}
+            unoptimized
           />
         )}
         <Image

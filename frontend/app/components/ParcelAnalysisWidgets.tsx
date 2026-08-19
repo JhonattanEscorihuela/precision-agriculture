@@ -8,6 +8,7 @@ import SegmentationPanel from '@/app/components/organisms/SegmentationPanel';
 import FenologicalComparisonWidget from '@/app/components/organisms/FenologicalComparisonWidget';
 import TextureWidget from '@/app/components/organisms/TextureWidget';
 import apiClient from '@/lib/axios';
+import { isAnalysisEligible } from '@/lib/acquisitionQuality';
 import type { NDVISummary, ResourceState, SegmentationResult, TextureDescriptor } from '@/lib/analysisTypes';
 import { isAxiosError } from 'axios';
 
@@ -83,7 +84,7 @@ export default function ParcelAnalysisWidgets({
   polygonName,
   polygonCoordinates,
 }: ParcelAnalysisWidgetsProps) {
-  const { latestNDVI, phenology, retry: retryAll } = useParcelAnalysis(polygonId);
+  const { phenology, retry: retryAll } = useParcelAnalysis(polygonId);
   const { getStartDate, getEndDate } = useDateRange();
 
   const [availableDates, setAvailableDates] = useState<NDVISummary[]>([]);
@@ -100,25 +101,27 @@ export default function ParcelAnalysisWidgets({
         const response = await apiClient.get<NDVISummary[]>(`/api/ndvi/polygon/${polygonId}`, {
           params: { start_date: startDate, end_date: endDate },
         });
-        setAvailableDates(response.data);
+        const suitableDates = response.data.filter(isAnalysisEligible);
+        setAvailableDates(suitableDates);
 
-        if (response.data.length > 0 && !selectedDate) {
-          setSelectedDate(response.data[0]);
+        if (suitableDates.length > 0) {
+          setSelectedDate((current) => (
+            current && suitableDates.some((date) => date.ndvi_result_id === current.ndvi_result_id)
+              ? current
+              : suitableDates[0]
+          ));
+        } else {
+          setSelectedDate(null);
+          setSegmentation(errorState('No hay fechas aptas para segmentación'));
+          setTexture(errorState('No hay fechas aptas para textura'));
         }
-      } catch (error) {
+      } catch {
         setAvailableDates([]);
       }
     };
 
     void loadAvailableDates();
   }, [polygonId, getStartDate, getEndDate]);
-
-  // Sincronizar con latestNDVI cuando cambia
-  useEffect(() => {
-    if (latestNDVI.data && !selectedDate) {
-      setSelectedDate(latestNDVI.data);
-    }
-  }, [latestNDVI.data, selectedDate]);
 
   // Cargar análisis de la fecha seleccionada
   const loadSelectedDateAnalysis = useCallback(async (ndviSummary: NDVISummary) => {
@@ -132,10 +135,10 @@ export default function ParcelAnalysisWidgets({
       try {
         const textureResult = await getOrCreateTexture(segResult.id);
         setTexture(successState(textureResult));
-      } catch (err) {
+      } catch {
         setTexture(errorState('No se pudo cargar la textura'));
       }
-    } catch (err) {
+    } catch {
       setSegmentation(errorState('No se pudo cargar la segmentación'));
       setTexture(errorState('Requiere segmentación'));
     }
@@ -143,9 +146,13 @@ export default function ParcelAnalysisWidgets({
 
   // Recargar cuando cambia la fecha seleccionada
   useEffect(() => {
-    if (selectedDate) {
+    if (!selectedDate) return;
+
+    const timer = window.setTimeout(() => {
       void loadSelectedDateAnalysis(selectedDate);
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [selectedDate, loadSelectedDateAnalysis]);
 
   const handleDateChange = (acquisitionId: number) => {

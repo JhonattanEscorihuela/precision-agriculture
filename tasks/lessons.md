@@ -517,3 +517,12 @@ useEffect(() => {
 - Imagen satelital se actualiza automáticamente sin F5
 - Útil para identificar fechas con nubes y elegir mejor imagen de referencia
 
+---
+
+### Nubosidad de escena no equivale a nubosidad de parcela
+
+`eo:cloud_cover` y `maxCloudCoverage` describen el producto completo. Para evaluar
+una parcela se debe usar SCL recortado por su geometría: clases 8, 9 y 10 como
+nubes, clase 3 como sombra y `dataMask`/SCL 0 como datos inválidos. Un dato ausente
+nunca debe convertirse en 0%, y el criterio de mosaico debe ser consistente entre
+las bandas descargadas y la máscara SCL.

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import DateSelector from '../molecules/DateSelector';
 import AcquireButton from '../molecules/AcquireButton';
@@ -10,8 +10,14 @@ import apiClient from '@/lib/axios';
 interface DateInfo {
   date: string;
   cloud_cover: number;
+  scene_id: string;
   acquired: boolean;
   ndvi_calculated: boolean;
+  parcel_cloud_cover: number | null;
+  parcel_shadow_cover: number | null;
+  valid_pixel_percentage: number | null;
+  usable_pixel_percentage: number | null;
+  quality_status: 'suitable' | 'caution' | 'unsuitable' | null;
 }
 
 interface SentinelPanelProps {
@@ -20,6 +26,20 @@ interface SentinelPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onAnalysisUpdated?: () => void;
+}
+
+function getSmartDates() {
+  const today = new Date();
+  const endDateStr = today.toISOString().split('T')[0];
+  const sixMonthsAgo = new Date(today);
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  sixMonthsAgo.setDate(1);
+
+  return {
+    startDateStr: sixMonthsAgo.toISOString().split('T')[0],
+    endDateStr,
+    maxDateStr: endDateStr,
+  };
 }
 
 /**
@@ -33,20 +53,6 @@ export default function SentinelPanel({
   onClose,
   onAnalysisUpdated,
 }: SentinelPanelProps) {
-  // Calcular fechas inteligentes
-  const getSmartDates = () => {
-    const today = new Date();
-    const endDateStr = today.toISOString().split('T')[0]; // Hoy
-
-    // Fecha inicio: primer día del mes hace 6 meses
-    const sixMonthsAgo = new Date(today);
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    sixMonthsAgo.setDate(1); // Primer día del mes
-    const startDateStr = sixMonthsAgo.toISOString().split('T')[0];
-
-    return { startDateStr, endDateStr, maxDateStr: endDateStr };
-  };
-
   const { startDateStr, endDateStr, maxDateStr } = getSmartDates();
 
   const [startDate, setStartDate] = useState(startDateStr);
@@ -63,54 +69,10 @@ export default function SentinelPanel({
   // Ref para evitar debounce en fetch inicial
   const isInitialFetchRef = useRef(true);
 
-  // Resetear completamente cuando cambia la parcela
-  useEffect(() => {
-    if (polygonId) {
-      const { startDateStr, endDateStr } = getSmartDates();
-      setStartDate(startDateStr);
-      setEndDate(endDateStr);
-      setSelectedDate(null);
-      setDates([]);
-      setIsLoadingDates(false);
-      setIsAcquiring(false);
-      setAcquisitionSuccess(false);
-      setAcquisitionError(false);
-      setErrorMessage('');
-      isInitialFetchRef.current = true; // Marcar para fetch inmediato
-    }
-  }, [polygonId]);
-
-  // Fetch inmediato cuando se abre el panel o cambia polygonId
-  useEffect(() => {
-    if (isOpen && polygonId && startDate && endDate && isInitialFetchRef.current) {
-      isInitialFetchRef.current = false;
-      fetchAvailableDates();
-    }
-  }, [isOpen, polygonId]);
-
-  // Fetch con debounce cuando el usuario cambia fechas manualmente
-  useEffect(() => {
-    if (!(isOpen && polygonId && startDate && endDate)) {
-      return;
-    }
-
-    // Evitar fetch en mount inicial (ya se hizo arriba)
-    if (isInitialFetchRef.current) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      fetchAvailableDates();
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [startDate, endDate]);
-
-  const fetchAvailableDates = async (resetAcquisitionState = true) => {
+  const fetchAvailableDates = useCallback(async (resetAcquisitionState = true) => {
     setIsLoadingDates(true);
     setSelectedDate(null);
 
-    // Solo resetear estado de adquisición si se solicita explícitamente
     if (resetAcquisitionState) {
       setAcquisitionSuccess(false);
       setAcquisitionError(false);
@@ -135,7 +97,40 @@ export default function SentinelPanel({
     } finally {
       setIsLoadingDates(false);
     }
-  };
+  }, [polygonId, startDate, endDate]);
+
+  // Resetear completamente cuando cambia la parcela
+  useEffect(() => {
+    if (polygonId) {
+      const { startDateStr, endDateStr } = getSmartDates();
+      setStartDate(startDateStr);
+      setEndDate(endDateStr);
+      setSelectedDate(null);
+      setDates([]);
+      setIsLoadingDates(false);
+      setIsAcquiring(false);
+      setAcquisitionSuccess(false);
+      setAcquisitionError(false);
+      setErrorMessage('');
+      isInitialFetchRef.current = true; // Marcar para fetch inmediato
+    }
+  }, [polygonId]);
+
+  // Fetch inmediato al abrir/cambiar parcela y con debounce para fechas manuales.
+  useEffect(() => {
+    if (!(isOpen && polygonId && startDate && endDate)) {
+      return;
+    }
+
+    const delay = isInitialFetchRef.current ? 0 : 400;
+    isInitialFetchRef.current = false;
+
+    const timer = setTimeout(() => {
+      void fetchAvailableDates();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, polygonId, startDate, endDate, fetchAvailableDates]);
 
   const handleAcquire = async () => {
     if (!selectedDate) return;
@@ -146,9 +141,11 @@ export default function SentinelPanel({
     setErrorMessage('');
 
     try {
+      const selectedDateInfo = dates.find((dateInfo) => dateInfo.date === selectedDate);
       const requestPayload = {
         polygon_id: polygonId,
         date: selectedDate,
+        scene_id: selectedDateInfo?.scene_id,
       };
 
       const response = await apiClient.post('/api/sentinel/acquire', requestPayload);

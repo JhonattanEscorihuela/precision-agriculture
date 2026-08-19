@@ -978,3 +978,39 @@ Por favor confirma:
 4. ¿Hay algo que deba agregarse o modificarse antes de empezar?
 
 Una vez confirmado, procederé con la Fase 1 (Backend — Modelo y CRUD).
+
+---
+
+## Corrección OE1 — Nubosidad real por parcela
+
+- [x] Separar nubosidad global de escena y nubosidad dentro de la parcela.
+- [x] Descargar SCL + dataMask con el mismo criterio `leastCC` que las bandas.
+- [x] Recortar SCL con la geometría exacta y contar clases 8, 9 y 10.
+- [x] Reportar sombra SCL 3 y porcentaje de píxeles válidos por separado.
+- [x] Persistir `scene_id`, método y métricas locales mediante migración SQL.
+- [x] Evitar que ausencia de metadatos se convierta en 0% de nubosidad.
+- [x] Recalcular métricas de adquisiciones antiguas al volver a solicitarlas.
+- [x] Mostrar en UI si el porcentaje corresponde a escena o parcela.
+- [x] Ejecutar pruebas focalizadas y validación Docker con credenciales reales.
+
+## Etapa SCL persistente y NDVI enmascarado
+
+- [x] Persistir el TIFF SCL/dataMask por adquisición.
+- [x] Definir `suitable`, `caution` y `unsuitable` con umbrales documentados.
+- [x] Reproyectar SCL por vecino más próximo a la grilla B04/B08.
+- [x] Excluir geometría externa, nodata, nubes SCL 8/9/10 y sombra SCL 3.
+- [x] Invalidar resultados derivados cuando se reemplaza un NDVI legado.
+- [x] Aplicar migración SQL con respaldo previo.
+- [x] Completar las tres adquisiciones locales y recalcular los dos NDVI existentes.
+- [x] Validar backend, OpenAPI, build de producción, lint focalizado y servicios HTTP.
+
+## Regeneración OE3/OE4
+
+- [x] Bloquear OE3/OE4 para observaciones no aptas o NDVI sin máscara SCL.
+- [x] Corregir máscara binaria OE3 a contrato 0/1/255 (`nodata=255`).
+- [x] Regenerar OE3 para la observación apta del 27/07/2026.
+- [x] Regenerar los tres descriptores OE4 sobre la nueva segmentación.
+- [x] Verificar que la observación no apta del 11/08/2026 quede excluida.
+- [x] Calcular OE2 faltante del 10/05/2026 y regenerar allí OE3/OE4.
+- [x] Verificar cadena completa: dos fechas aptas procesadas y una no apta excluida.
+- [x] Ejecutar build de producción del frontend antes de preparar GitHub.

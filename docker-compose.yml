@@ -6,8 +6,21 @@ services:
     container_name: precision-agriculture-frontend
     ports:
       - "3000:3000" # Exponemos el frontend en el puerto 3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
     environment:
       - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks:
       - app-network
 
@@ -27,6 +40,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks:
       - app-network
 
@@ -56,5 +74,3 @@ networks:
 
 volumes:
   postgres_data:
-
-

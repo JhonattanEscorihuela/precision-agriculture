@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package.json yarn.lock ./
 
 # Instalamos las dependencias
-RUN yarn install
+RUN corepack enable && yarn install --frozen-lockfile
 
 # Copiamos el resto del código fuente al contenedor
 COPY . .

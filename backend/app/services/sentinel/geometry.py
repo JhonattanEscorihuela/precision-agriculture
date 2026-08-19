@@ -4,6 +4,7 @@ Responsabilidad: Bounding box, dimensiones óptimas, validaciones.
 """
 
 import logging
+import math
 from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
@@ -62,14 +63,14 @@ def calculate_optimal_dimensions(
     # Aproximación: 1 grado de latitud ≈ 111 km
     # Longitud depende de la latitud: 1 grado lng ≈ 111 km × cos(lat)
     meters_per_deg_lat = 111000
-    meters_per_deg_lng = 111000 * abs(bbox['center_lat'])
+    meters_per_deg_lng = 111000 * math.cos(math.radians(bbox['center_lat']))
 
     width_m = bbox['width_degrees'] * meters_per_deg_lng
     height_m = bbox['height_degrees'] * meters_per_deg_lat
 
     # Calcular dimensiones en píxeles para lograr la resolución deseada
-    width_px = max(min_dimension, int(width_m / max_resolution_m_per_px))
-    height_px = max(min_dimension, int(height_m / max_resolution_m_per_px))
+    width_px = max(min_dimension, math.ceil(width_m / max_resolution_m_per_px))
+    height_px = max(min_dimension, math.ceil(height_m / max_resolution_m_per_px))
 
     logger.info(
         f"📐 Dimensiones calculadas: {width_m:.0f}m × {height_m:.0f}m → "

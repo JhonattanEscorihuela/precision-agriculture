@@ -16,7 +16,7 @@ from app.models.user import User
 from app.database import get_session
 
 # Configuración de JWT Bearer token
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -32,7 +32,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
     Args:
         data: Diccionario con datos a codificar (típicamente {"sub": user_id})
-        expires_delta: Tiempo de expiración opcional (default: 30 días)
+        expires_delta: Tiempo de expiración opcional.
 
     Returns:
         Token JWT codificado como string
@@ -41,7 +41,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(days=30)
+        expire = datetime.utcnow() + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
@@ -63,7 +65,7 @@ def decode_access_token(token: str) -> Optional[dict]:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_session)
 ) -> User:
     """
@@ -85,6 +87,9 @@ async def get_current_user(
         detail="No se pudo validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if credentials is None:
+        raise credentials_exception
 
     token = credentials.credentials
     payload = decode_access_token(token)
