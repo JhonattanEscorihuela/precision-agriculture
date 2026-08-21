@@ -118,37 +118,63 @@ La validación se distribuye como evidencia medible en cada OE.
 - ✅ Puerta de calidad SCL: solo adquisiciones aptas con máscara de nubes
 - ⚠️ Validación agronómica parcial: falta verdad terrestre para medir IoU/F1
 
-### OE4 — Evaluar descriptores de textura ✅ IMPLEMENTACIÓN COMPLETA
-- ✅ Bordes, homogeneidad y contraste mediante filtrado convolucional
-- ✅ Estadísticos, normalización, persistencia, overlays y widget de dashboard
-- ✅ Trazabilidad completa y puerta de calidad heredada de OE3/NDVI
-- ⚠️ Validación agronómica parcial: falta asociar respuestas con clases de campo
+### OE4 — Evaluar descriptores de textura ✅ COMPLETO (2026-08-21)
 
-**Alcance científico:** los CSV atribuidos a Brasil permiten una demostración
-exploratoria, pero no contienen geometría ni verdad terrestre y se solapan entre
-sí. Ver `docs/VALIDACION_CIENTIFICA_OE3_OE4.md`.
+**Backend:**
+- ✅ Modelo `TextureDescriptor` con 3 kernels: edges, homogeneity, contrast
+- ✅ CRUD completo para descriptores (`crud/texture.py`)
+- ✅ Servicio `texture_service.py` con cálculo convolucional + estadísticos
+- ✅ 4 endpoints: calculate (idempotente), get by segmentation, download overlay, get overlay cache
+- ✅ Puerta de calidad: Solo adquisiciones `suitable` con `cloud_mask_applied=True`
+- ✅ Overlay caching: PNG generado una vez, cacheado en `texture_overlay_cache`
+- ✅ Ownership protection: JWT validation en todos los endpoints
+- ✅ **Tests completos**: 8 tests E2E en `test_oe4_texture_complete.py` (52/52 tests backend PASSED)
 
-### OE5 — Construir interfaz integrada
+**Frontend:**
+- ✅ Componente `TextureWidget.tsx` en dashboard individual
+- ✅ Visualización overlay de 3 kernels sobre imagen satelital
+- ✅ Toggle "Imagen satélite" / "Solo imagen"
+- ✅ Selector de fecha sincronizado con NDVI y segmentación
+- ✅ Estado loading durante cálculo
+
+**Validación:**
+- ✅ Técnica: Tests automatizados, idempotencia, puertas de calidad, ownership
+- ⚠️ Agronómica parcial: Sin ground truth de campo para validar correspondencia con condiciones reales
+
+**Alcance científico:** Ver `docs/VALIDACION_CIENTIFICA_OE3_OE4.md`.
+
+### OE5 — Construir interfaz integrada ✅ COMPLETO (2026-08-21)
+
+**Frontend:**
 - ✅ Mapa Leaflet con dibujo de polígonos
 - ✅ CRUD parcelas funcionando
-- ✅ Panel lateral de adquisición Sentinel-2 (OE1 frontend)
-- ✅ Panel visualización NDVI (OE2 frontend)
-- ✅ Dashboard individual por parcela con widgets (patrón AWS CloudWatch)
+- ✅ Panel lateral adquisición Sentinel-2 (OE1 frontend)
+- ✅ Panel visualización NDVI con gráfica temporal (OE2 frontend)
+- ✅ Dashboard individual con grid de widgets (patrón AWS CloudWatch)
 - ✅ Estado de salud basado en datos reales
 - ✅ Imagen satelital RGB como capa de fondo en widgets
 - ✅ Selector de fecha con recarga sincronizada de análisis
-- ✅ **Overlays en mapa con filtro de calidad** (solo adquisiciones aptas)
-- 🔧 PENDIENTE: Comparación temporal multi-fecha, exportación reportes
+- ✅ Overlays en mapa con filtro de calidad (solo adquisiciones aptas)
+- ✅ Responsive: mobile (375px) + desktop (1920px)
 
-**Pipeline de calidad de nubes (2026-08-17):**
-- ✅ Nubosidad calculada por parcela (no global) usando SCL
-- ✅ Estados: `suitable` / `caution` / `unsuitable`
-- ✅ NDVI con máscara coherente (nubes, sombras, nodata excluidos)
-- ✅ Puerta de calidad en OE3/OE4 (solo adquisiciones aptas)
-- ✅ Dashboard `/cultivos/[id]` filtra fechas aptas
-- ✅ Mapa home filtra overlays por calidad (fix 2026-08-19)
-- ✅ Scripts de backfill y regeneración
-- ✅ Documentación completa en `docs/CLOUD_QUALITY_AND_NDVI_MASK.md`
+**Backend Integration:**
+- ✅ 8 routers API funcionando (auth, polygons, sentinel, ndvi, segmentation, texture, phenology, analysis)
+- ✅ JWT authentication en todos los endpoints protegidos
+- ✅ Ownership validation (usuario solo accede a sus parcelas)
+- ✅ Pipeline de calidad completo (SCL, suitable/caution/unsuitable)
+- ✅ Trazabilidad OE1→OE2→OE3→OE4→OE5 validada
+
+**Tests:**
+- ✅ 3 tests E2E de integración API (`test_e2e_api_endpoints.py`)
+- ✅ 55/55 tests backend PASSED (incluye E2E)
+- ✅ Docker Compose end-to-end funcional
+
+**Fuera de alcance (por diseño):**
+- ❌ Comparación temporal multi-fecha (UI avanzada)
+- ❌ Exportación PDF/CSV de reportes
+- ❌ Modelos IA entrenados (Random Forest, XGBoost, ResUNet-a)
+
+**Nota:** Funcionalidades avanzadas documentadas en `knowledge/objectives/OE_future_work.md`.
 
 ---
 

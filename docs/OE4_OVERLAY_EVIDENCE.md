@@ -1,12 +1,17 @@
 # OE4 — Texture Overlay Endpoint — Evidencia de Implementación
 
-**Fecha:** 2026-08-04  
-**Commit:** `34de01a` (merge de `37135b7`)  
+**Fecha Implementación Inicial:** 2026-08-04  
+**Fecha Validación Actualizada:** 2026-08-21  
+**Commit Inicial:** `34de01a` (merge de `37135b7`)  
 **Objetivo:** Endpoint para generar overlays PNG coloreados de textura para visualización en mapas Leaflet
 
 ---
 
-## ✅ IMPLEMENTACIÓN COMPLETA
+## ✅ IMPLEMENTACIÓN COMPLETA Y VALIDADA
+
+**Estado**: Funcionalmente completo y técnicamente validado mediante tests automatizados.
+
+**Validación agronómica**: Exploratoria debido a ausencia de ground truth de campo (ver `VALIDACION_CIENTIFICA_OE3_OE4.md`).
 
 ### 1. Modelo de caché
 
@@ -419,3 +424,101 @@ Los kernels implementados siguen la metodología OE4:
 ---
 
 **Endpoint listo para uso en frontend. Ver `FRONTEND_SPEC_OVERLAYS.md` para especificación completa de integración.**
+
+---
+
+## 🧪 VALIDACIÓN AUTOMATIZADA (2026-08-21)
+
+### Tests End-to-End Implementados
+
+**Archivo:** `backend/tests/test_oe4_texture_complete.py` (697 líneas)
+
+**Cobertura de tests**:
+
+1. ✅ **test_calculate_texture_descriptors_success**
+   - Verifica cálculo exitoso de 3 descriptores (edges, homogeneity, contrast)
+   - Valida campos requeridos y rangos de valores
+   - Confirma presencia de los 3 kernels
+
+2. ✅ **test_texture_idempotence**
+   - Primera llamada calcula y guarda descriptores
+   - Segunda llamada retorna mismos IDs sin recalcular
+   - Demuestra cacheo correcto en BD
+
+3. ✅ **test_texture_rejects_unsuitable_quality**
+   - Puerta de calidad: Rechaza acquisition con `quality_status != "suitable"`
+   - Retorna 409 Conflict con mensaje descriptivo
+   - Protege cadena de trazabilidad OE1→OE2→OE3→OE4
+
+4. ✅ **test_texture_rejects_ndvi_without_scl**
+   - Requisito máscara SCL: Rechaza NDVI con `cloud_mask_applied=False`
+   - Retorna 409 Conflict con mensaje sobre SCL
+   - Garantiza análisis solo sobre datos con nubes enmascaradas
+
+5. ✅ **test_texture_ownership_protection**
+   - Ownership: Usuario no puede acceder a textura de parcela ajena
+   - Retorna 403 Forbidden
+   - Protege datos entre usuarios
+
+6. ✅ **test_texture_overlay_cache_behavior**
+   - Primera llamada overlay: `cached=false` (genera PNG)
+   - Segunda llamada overlay: `cached=true` (sirve desde BD)
+   - Verifica imagen base64, bounds, interpretación
+
+7. ✅ **test_get_descriptors_by_segmentation**
+   - GET by-segmentation endpoint funciona después de calcular
+   - Retorna mismos descriptores que POST
+
+8. ✅ **test_get_descriptors_not_calculated_yet**
+   - GET antes de calcular retorna 404
+   - Comportamiento correcto cuando no hay datos
+
+### Fixtures Sintéticos
+
+Datos de prueba basados en parcelas reales SRRG Calabozo:
+- NDVI sintético con valores realistas (0.5-0.7 cultivado, 0.0-0.2 no cultivado)
+- Adquisiciones con `quality_status="suitable"` y `"unsuitable"`
+- NDVI con y sin `cloud_mask_applied`
+- Segmentaciones asociadas
+- Usuarios para tests de ownership
+
+### Metodología de Validación
+
+**Técnica**: Tests de integración con API real (no mocks)
+**Base de datos**: SQLite en memoria (aislado por test)
+**Autenticación**: JWT real con fixtures de usuario
+**Datos**: Sintéticos pero realistas (basados en parcelas SRRG)
+
+### Limitaciones de Validación
+
+⚠️ **Validación agronómica parcial**: Los tests verifican corrección técnica (cálculo, persistencia, seguridad) pero NO validan que los descriptores de textura correspondan a condiciones agronómicas reales del campo.
+
+**Razón**: Ausencia de ground truth de campo (etiquetas de condición real del cultivo).
+
+**Referencia**: `docs/VALIDACION_CIENTIFICA_OE3_OE4.md` — "Cobertura técnica completa, validación agronómica pendiente de datos de campo"
+
+### Ejecución de Tests
+
+```bash
+# Desde backend/
+docker-compose exec backend pytest tests/test_oe4_texture_complete.py -v
+
+# Resultado esperado: 8 tests pasando
+```
+
+**Resultado (2026-08-21):**
+```
+============================= test session starts ==============================
+tests/test_oe4_texture_complete.py::test_calculate_texture_descriptors_success PASSED [ 12%]
+tests/test_oe4_texture_complete.py::test_texture_idempotence PASSED      [ 25%]
+tests/test_oe4_texture_complete.py::test_texture_rejects_unsuitable_quality PASSED [ 37%]
+tests/test_oe4_texture_complete.py::test_texture_rejects_ndvi_without_scl PASSED [ 50%]
+tests/test_oe4_texture_complete.py::test_texture_ownership_protection PASSED [ 62%]
+tests/test_oe4_texture_complete.py::test_texture_overlay_cache_behavior PASSED [ 75%]
+tests/test_oe4_texture_complete.py::test_get_descriptors_by_segmentation PASSED [ 87%]
+tests/test_oe4_texture_complete.py::test_get_descriptors_not_calculated_yet PASSED [100%]
+
+============================== 8 passed in 3.24s ===============================
+```
+
+✅ **FASE 1 - Tests OE4: COMPLETA**
